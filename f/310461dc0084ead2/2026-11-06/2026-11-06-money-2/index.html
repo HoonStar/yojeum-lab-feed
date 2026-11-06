@@ -160,4 +160,15 @@ document.getElementById('b-zip').onclick = async () => {
   catch (e) { st.textContent = e && e.code === 'declined' ? '' : '실패: ' + (e.code || e.message || ''); }
 };
 </script>
-</body></html>
+</body></html><script>
+(function(){
+  var onClaude=/(^|\.)claude\.ai$/.test(location.hostname); if(onClaude) return;
+  function apply(){
+    var opt=document.getElementById('opt-img'); if(opt) opt.checked=true;
+    document.querySelectorAll('.imgs button.b-save').forEach(function(b){ var a=document.createElement('a'); a.href='img/'+b.dataset.file; a.download=b.dataset.file; a.textContent='내려받기'; a.style.cssText='display:inline-block;margin-top:6px;font-size:12px;font-weight:600'; b.replaceWith(a); });
+    var zb=document.getElementById('b-zip'); if(zb){ zb.disabled=false; zb.textContent='모두 내려받기 (파일 저장)'; zb.onclick=function(){ var links=[].slice.call(document.querySelectorAll('.imgs a[download]')); var i=0; (function next(){ if(i>=links.length) return; links[i++].click(); setTimeout(next,700); })(); }; }
+    var st=document.getElementById('zip-status'); if(st) st.textContent='이미지 주소가 공개된 사본이에요. 먼저 "서식 복사(이미지 링크 포함)"로 붙여넣어 이미지가 함께 올라가는지 보고, 안 되면 내려받기 → 네이버 사진 버튼으로 올리세요.';
+  }
+  setTimeout(apply,1500); setTimeout(apply,4000);
+})();
+</script>

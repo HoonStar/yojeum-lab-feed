@@ -1,0 +1,128 @@
+[
+ {
+  "id": "2026-11-07-routine-1",
+  "date": "2026-11-07",
+  "theme": "routine",
+  "themeLabel": "루틴 & 자기관리",
+  "index": 1,
+  "slot": "10:30",
+  "title": "주말 아침 루틴, 11월엔 기상 시간과 첫 30분만 바꿔도 덜 피곤해요 (2026)",
+  "keyword": "주말 아침 루틴",
+  "aiImages": false,
+  "category": "루틴 & 자기관리",
+  "naverTopic": "일상·생각",
+  "hashtags": [
+   "#주말아침루틴",
+   "#주말루틴",
+   "#아침루틴"
+  ],
+  "path": "2026-11-07/2026-11-07-routine-1/",
+  "dashboardPostId": "2026-11-07-routine-1",
+  "addedAt": "2026-11-06T09:04:12.572Z"
+ },
+ {
+  "id": "2026-11-07-travel-1",
+  "date": "2026-11-07",
+  "theme": "travel",
+  "themeLabel": "관광지 안내",
+  "index": 1,
+  "slot": "11:30",
+  "title": "공주 공산성 동절기 관람 안내, 11월부터는 17시에 닫아요 (2026)",
+  "keyword": "공주 공산성 동절기 관람",
+  "aiImages": false,
+  "category": "관광지 안내",
+  "naverTopic": "국내여행",
+  "hashtags": [
+   "#공산성",
+   "#공주공산성",
+   "#공주가볼만한곳"
+  ],
+  "path": "2026-11-07/2026-11-07-travel-1/",
+  "dashboardPostId": "2026-11-07-travel-1",
+  "addedAt": "2026-11-06T09:04:12.621Z"
+ },
+ {
+  "id": "2026-11-07-travel-2",
+  "date": "2026-11-07",
+  "theme": "travel",
+  "themeLabel": "관광지 안내",
+  "index": 2,
+  "slot": "20:30",
+  "title": "내장산 단풍 서래봉 예약 탐방로, 운영기간·정원 확인 포인트 (2026)",
+  "keyword": "내장산 서래봉 예약 탐방로",
+  "aiImages": false,
+  "category": "관광지 안내",
+  "naverTopic": "국내여행",
+  "hashtags": [
+   "#내장산단풍",
+   "#내장산서래봉",
+   "#정읍가볼만한곳"
+  ],
+  "path": "2026-11-07/2026-11-07-travel-2/",
+  "dashboardPostId": "2026-11-07-travel-2",
+  "addedAt": "2026-11-06T09:04:12.668Z"
+ },
+ {
+  "id": "2026-11-06-money-1",
+  "date": "2026-11-06",
+  "theme": "money",
+  "themeLabel": "돈 되는 생활",
+  "index": 1,
+  "slot": "07:30",
+  "title": "연말정산 미리보기 '추가납부' 떴다면, 12월까지 되돌리는 5가지 (2026)",
+  "keyword": "연말정산 미리보기 추가납부",
+  "aiImages": false,
+  "category": "돈 되는 생활",
+  "naverTopic": "비즈니스·경제",
+  "hashtags": [
+   "#연말정산미리보기",
+   "#연말정산추가납부",
+   "#2026연말정산"
+  ],
+  "path": "2026-11-06/2026-11-06-money-1/",
+  "dashboardPostId": "2026-11-06-money-1",
+  "addedAt": "2026-11-06T09:04:12.443Z"
+ },
+ {
+  "id": "2026-11-06-travel-1",
+  "date": "2026-11-06",
+  "theme": "travel",
+  "themeLabel": "관광지 안내",
+  "index": 1,
+  "slot": "11:30",
+  "title": "창덕궁 후원 11월 관람, 예매·요금·코스 한 번에 정리 (2026)",
+  "keyword": "창덕궁 후원 11월 관람",
+  "aiImages": false,
+  "category": "관광지 안내",
+  "naverTopic": "국내여행",
+  "hashtags": [
+   "#창덕궁후원",
+   "#창덕궁후원예약",
+   "#서울가볼만한곳"
+  ],
+  "path": "2026-11-06/2026-11-06-travel-1/",
+  "dashboardPostId": "2026-11-06-travel-1",
+  "addedAt": "2026-11-06T09:04:12.490Z"
+ },
+ {
+  "id": "2026-11-06-travel-2",
+  "date": "2026-11-06",
+  "theme": "travel",
+  "themeLabel": "관광지 안내",
+  "index": 2,
+  "slot": "20:30",
+  "title": "월정사 전나무숲길 늦가을 산책, 주차·요금 출처별로 비교했어요 (2026)",
+  "keyword": "월정사 전나무숲길 늦가을",
+  "aiImages": false,
+  "category": "관광지 안내",
+  "naverTopic": "국내여행",
+  "hashtags": [
+   "#월정사전나무숲길",
+   "#오대산월정사",
+   "#평창가볼만한곳"
+  ],
+  "path": "2026-11-06/2026-11-06-travel-2/",
+  "dashboardPostId": "2026-11-06-travel-2",
+  "addedAt": "2026-11-06T09:04:12.534Z"
+ }
+]

@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#0E7C7B">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="리뷰 공방">
+<link rel="apple-touch-icon" href="icon-180.png">
 <title>리뷰 공방</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600&display=swap">
 <style>
@@ -146,6 +150,10 @@ const isActive=it=>!["posted","skipped"].includes(it.status);
 // ---------- 연결 설정 (링크 #s=서버&k=열쇠[&i=상품id]) ----------
 function loadCfg(){ try{ const c=JSON.parse(localStorage.getItem("rl.cfg2")||"null"); if(c&&c.server&&c.key) return c; }catch(e){} return null; }
 function saveCfg(c){ try{ localStorage.setItem("rl.cfg2",JSON.stringify(c)); }catch(e){} }
+function canonicalHash(c){ return "#s="+encodeURIComponent(c.server)+"&k="+encodeURIComponent(c.key); }
+function keepHash(){ // 홈 화면 추가·북마크가 열쇠까지 저장하도록 주소에 유지(아이폰 홈 화면 앱은 Safari와 저장소가 분리됨)
+  const c=S.cfg; if(!c||S.demo) return; const want=canonicalHash(c); if(location.hash!==want) history.replaceState(null,"",location.pathname+location.search+want);
+}
 function readHash(){
   const hsh=(location.hash||"").slice(1); if(!hsh) return;
   if(hsh==="demo"){ S.demo=true; history.replaceState(null,"",location.pathname+location.search); return; }
@@ -153,7 +161,6 @@ function readHash(){
   const s=p.get("s"), k=p.get("k"), i=p.get("i");
   if(s&&k&&/^https:\/\//.test(s)) saveCfg({server:s.replace(/\/+$/,""),key:k.trim()});
   if(i) S.openId=i;
-  history.replaceState(null,"",location.pathname+location.search); // 주소창에서 열쇠 제거
 }
 
 // ---------- 서버 API ----------
@@ -258,7 +265,12 @@ function setupView(){
     h("div",{class:"bar"}, h("div",{class:"brand"}, h("div",{class:"logo"},"공"), h("div",{}, h("h1",{text:"리뷰 공방"}), h("div",{class:"sub",text:"쿠팡 사진 리뷰 작업실"})))),
     h("div",{class:"card"}, h("h2",{text:"남편이 보낸 링크로 열어 주세요"}),
       h("p",{text:"이 앱은 링크에 든 열쇠로 남편의 리뷰 공방 서버에 연결돼요. 열쇠가 없는 상태라 아직 아무것도 불러올 수 없어요."}),
-      h("p",{class:"hint",text:"링크 모양: …/review/#s=서버주소&k=열쇠 — 한 번 열면 이 폰에 저장되고 주소창에서는 지워져요. 홈 화면에 추가하면 앱처럼 쓸 수 있어요."}),
+      h("p",{class:"hint",text:"링크 모양: …/review/#s=서버주소&k=열쇠. 열쇠가 든 링크를 연 상태에서 '홈 화면에 추가'를 하면 앱처럼 한 번에 열려요."}),
+      h("details",{}, h("summary",{text:"서버 주소와 열쇠를 직접 입력"}),
+        h("div",{class:"stack",style:"margin-top:8px"},
+          h("div",{class:"field"},h("label",{for:"c-s",text:"서버 주소"}),h("input",{type:"url",id:"c-s",value:"https://review-lab.jhlee1031111.workers.dev",autocapitalize:"off"})),
+          h("div",{class:"field"},h("label",{for:"c-k",text:"열쇠"}),h("input",{type:"text",id:"c-k",placeholder:"남편이 준 64자",autocapitalize:"off",autocomplete:"off"})),
+          h("button",{class:"btn primary",onclick:()=>{ const sv=(document.getElementById("c-s").value||"").trim().replace(/\/+$/,""), k=(document.getElementById("c-k").value||"").trim(); if(!/^https:\/\//.test(sv)||k.length<16){ toast("서버 주소와 열쇠를 확인해 주세요"); return; } saveCfg({server:sv,key:k}); S.cfg=loadCfg(); keepHash(); loadAll(false); }},"연결"))),
       h("div",{class:"row"}, h("button",{class:"btn",onclick:()=>{ S.demo=true; seedDemo(); S.cfg={server:"demo",key:"demo"}; loadAll(false); }},"화면만 둘러보기 (데모)"))));
 }
 function listView(){
@@ -400,7 +412,7 @@ function settingsView(){
   box.append(h("div",{class:"card"}, h("h2",{text:"연결"}),
     h("dl",{class:"kv"}, h("dt",{text:"서버"}), h("dd",{class:"mono",text:S.demo? "데모" : S.cfg.server}), h("dt",{text:"열쇠"}), h("dd",{class:"mono",text:S.demo? "—" : S.cfg.key.slice(0,6)+"…"}), h("dt",{text:"계정"}), h("dd",{text:(S.app&&ACCT[S.app.account])||"—"}), h("dt",{text:"즉시 알림"}), h("dd",{text:(S.app&&S.app.wakePr)? "켜짐 (요청 즉시 엔진 호출)" : "꺼짐 (예약 엔진만)"})),
     h("p",{class:"hint",text:"열쇠는 이 폰에만 저장돼요. 새 링크를 열면 바뀌고, 아래 버튼으로 지울 수 있어요."}),
-    h("div",{class:"row"}, h("button",{class:"btn danger sm",onclick:()=>{ try{localStorage.removeItem("rl.cfg2");}catch(e){} S.cfg=null; S.demo=false; S.items=[]; S.view="list"; render(); }},"연결 끊기"))));
+    h("div",{class:"row"}, h("button",{class:"btn danger sm",onclick:()=>{ try{localStorage.removeItem("rl.cfg2");}catch(e){} S.cfg=null; S.demo=false; S.items=[]; S.view="list"; history.replaceState(null,"",location.pathname+location.search); render(); }},"연결 끊기"))));
   const gcard=h("div",{class:"card"}, h("h2",{text:"리뷰 작성 규칙"}), h("p",{class:"hint",text:"엔진이 리뷰를 쓸 때 그대로 따르는 지시문이에요. 말투나 길이를 바꾸고 싶을 때만 고치세요."}));
   if(!guide){ gcard.append(h("button",{class:"btn sm",onclick:async()=>{ try{ const r=await api("/api/rules"); S.guide={text:r.text||""}; }catch(e){ S.guide={text:""}; toast(errMsg(e,"규칙을 불러오지 못했어요")); } render(); }},"규칙 불러오기")); }
   else { const ta=h("textarea",{rows:16},guide.text); gcard.append(h("pre",{class:"doc",text:guide.text||"(비어 있음)"}), h("details",{}, h("summary",{text:"수정"}), ta, h("div",{class:"row",style:"margin-top:8px"}, h("button",{class:"btn primary sm",onclick:async()=>{ try{ await api("/api/rules",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({text:ta.value})}); S.guide={text:ta.value}; toast("저장했어요. 다음 리뷰부터 반영돼요."); render(); }catch(e){ toast(errMsg(e,"저장하지 못했어요")); } }},"저장")))); }
@@ -417,6 +429,7 @@ function settingsView(){
 // ---------- 시작 ----------
 readHash(); S.cfg=loadCfg();
 if(S.demo){ seedDemo(); S.cfg={server:"demo",key:"demo"}; }
+keepHash();
 render();
 if(S.cfg) loadAll(false);
 document.addEventListener("visibilitychange",()=>{ if(!document.hidden&&S.cfg) loadAll(true); });

@@ -77,6 +77,21 @@ async function mutateJson(env, path, mutate, message) {
     catch (e) { if (e.code !== "conflict" || i === 3) throw e; }
   }
 }
+// ---------- Git Data API: 여러 파일을 한 번의 커밋으로 ----------
+async function ghJson(env, path, init = {}) { const r = await gh(env, path, init); const t = await r.text(); let j = null; try { j = JSON.parse(t); } catch (e) {} if (!r.ok) { const e = new Error("GitHub " + r.status + " " + path + " " + t.slice(0, 160)); e.status = r.status; throw e; } return j; }
+async function commitFiles(env, files, message) {
+  // files: [{path, base64}] (binary) 또는 [{path, content}] (text). 비-fast-forward면 최대 3회 재시도.
+  const repo = env.GH_REPO, br = branch(env);
+  const blobs = await Promise.all(files.map(async f => f.base64 ? { path: f.path, sha: (await ghJson(env, `/repos/${repo}/git/blobs`, { method: "POST", body: JSON.stringify({ content: f.base64, encoding: "base64" }) })).sha } : { path: f.path, content: f.content }));
+  for (let i = 0; i < 3; i++) {
+    const head = (await ghJson(env, `/repos/${repo}/git/ref/heads/${br}`)).object.sha;
+    const baseTree = (await ghJson(env, `/repos/${repo}/git/commits/${head}`)).tree.sha;
+    const tree = (await ghJson(env, `/repos/${repo}/git/trees`, { method: "POST", body: JSON.stringify({ base_tree: baseTree, tree: blobs.map(b => b.sha ? { path: b.path, mode: "100644", type: "blob", sha: b.sha } : { path: b.path, mode: "100644", type: "blob", content: b.content }) }) })).sha;
+    const commit = (await ghJson(env, `/repos/${repo}/git/commits`, { method: "POST", body: JSON.stringify({ message, tree, parents: [head] }) })).sha;
+    try { await ghJson(env, `/repos/${repo}/git/refs/heads/${br}`, { method: "PATCH", body: JSON.stringify({ sha: commit, force: false }) }); return commit; }
+    catch (e) { if (!(e.status === 422 || e.status === 409) || i === 2) throw e; }
+  }
+}
 async function comment(env, body) { const n = Number(env.WAKE_PR || 0); if (!n) return false; const r = await gh(env, `/repos/${env.GH_REPO}/issues/${n}/comments`, { method: "POST", body: JSON.stringify({ body }) }); return r.ok; }
 
 // ---------- store ----------
@@ -165,6 +180,19 @@ async function api(request, env, acct, url) {
     if (parts[0] === "items" && parts.length === 1 && m === "POST") { const b = await request.json(); const it = sanitizeCreate(b, acct); await saveItem(env, it, `app(${acct}): 접수 ${it.productName}`); return json({ item: it }, 201); }
     if (parts[0] === "items" && parts.length === 2 && m === "GET") { const it = await getItem(env, parts[1]); if (!it) return json({ error: "없음" }, 404); return json({ item: it }); }
     if (parts[0] === "items" && parts.length === 2 && m === "PATCH") { const b = await request.json(); const r = await applyPatch(env, acct, parts[1], b); return json(r); }
+    if (parts[0] === "items" && parts.length === 4 && parts[2] === "photos" && parts[3] === "batch" && m === "POST") {
+      const it = await getItem(env, parts[1]); if (!it) return json({ error: "없음" }, 404);
+      const fd = await request.formData(); const blobsIn = fd.getAll("photos").filter(f => f && typeof f.arrayBuffer === "function");
+      if (!blobsIn.length) return json({ error: "사진이 없어요" }, 400); if (blobsIn.length > 10) return json({ error: "한 번에 10장까지" }, 400);
+      let n = (it.photos || []).length; const files = []; const added = [];
+      for (const f of blobsIn) { const buf = new Uint8Array(await f.arrayBuffer()); if (!buf.length) continue; if (buf.length > 6 * 1024 * 1024) return json({ error: "사진이 너무 커요(6MB 초과)" }, 413); n++; const file = `photos/${it.id}/${String(n).padStart(2, "0")}.jpg`; files.push({ path: file, base64: b64encode(buf) }); added.push({ file, tag: "" }); }
+      it.photos = [...(it.photos || []), ...added]; it.updatedAt = nowIso();
+      const idx = await loadIndex(env); idx.items[it.id] = it; idx.updatedAt = it.updatedAt;
+      files.push({ path: `items/${it.id}.json`, content: JSON.stringify(it, null, 2) + "\n" });
+      files.push({ path: "index.json", content: JSON.stringify(idx, null, 2) + "\n" });
+      await commitFiles(env, files, `app(${acct}): 사진 ${added.length}장 ${it.id}`);
+      return json({ item: it, files: added.map(a => a.file) });
+    }
     if (parts[0] === "items" && parts.length === 3 && parts[2] === "photos" && m === "POST") {
       const it = await getItem(env, parts[1]); if (!it) return json({ error: "없음" }, 404);
       const buf = new Uint8Array(await request.arrayBuffer()); if (!buf.length) return json({ error: "빈 파일" }, 400); if (buf.length > 6 * 1024 * 1024) return json({ error: "사진이 너무 커요(6MB 초과)" }, 413);

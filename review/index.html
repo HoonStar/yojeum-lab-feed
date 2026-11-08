@@ -83,14 +83,14 @@ textarea{resize:vertical;min-height:72px}
 .fields{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .fields .wide{grid-column:1/-1}
 .photos{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-.ph{background:var(--surface-2);border-radius:10px;overflow:hidden;display:flex;flex-direction:column;gap:4px;padding-bottom:6px}
+.ph{background:var(--surface-2);border-radius:10px;overflow:hidden;display:flex;flex-direction:column;gap:4px;padding-bottom:4px;position:relative}
 .ph img{width:100%;aspect-ratio:1;object-fit:cover;display:block;max-width:100%}
-.ph select{font-size:12px;padding:6px;border-radius:8px;margin:0 6px;width:calc(100% - 12px)}
 .ph .x{display:flex;justify-content:space-between;align-items:center;padding:0 6px}
 .verdict{display:inline-flex;align-items:center;font-size:11px;padding:1px 7px;border-radius:999px;background:var(--surface-2);color:var(--ink-2);margin:0 6px}
 .verdict.good{background:var(--good-soft);color:var(--good)} .verdict.warn{background:var(--warn-soft);color:var(--warn)} .verdict.crit{background:var(--crit-soft);color:var(--crit)}
 .vnote{font-size:11px;color:var(--ink-3);padding:0 6px}
 .addph{border:1.5px dashed var(--line);border-radius:10px;aspect-ratio:1;display:grid;place-items:center;color:var(--ink-2);font-size:13px;text-align:center;padding:6px;background:var(--surface);white-space:pre-line}
+.addph.busy{border-style:solid;border-color:var(--accent);color:var(--accent)}
 .addph input{display:none}
 .stars{display:flex;gap:2px}
 .star{background:none;border:0;font-size:34px;line-height:1;color:var(--line);padding:0 2px}
@@ -119,6 +119,7 @@ ul.clean,ol.clean{margin:0;padding-left:18px;display:flex;flex-direction:column;
 @keyframes sp{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion: reduce){ .spin{animation:none} }
 pre.doc{white-space:pre-wrap;font-family:var(--font);font-size:13px;line-height:1.65;margin:0;max-height:50vh;overflow:auto;background:var(--surface-2);border-radius:10px;padding:12px}
+.saved{font-size:11px;color:var(--ink-3)}
 </style>
 </head>
 <body>
@@ -130,12 +131,12 @@ pre.doc{white-space:pre-wrap;font-family:var(--font);font-size:13px;line-height:
 const STATUS={collected:"사진·메모 필요",mismatch:"사진 확인 필요",ready:"작성 대기",drafting:"작성 중",drafted:"리뷰 완성",posted:"게시됨",skipped:"건너뜀"};
 const VERDICT={match:["일치 ✓","good"],unsure:["확인 필요","warn"],mismatch:["다른 상품","crit"]};
 const FLAG={stock:"직접 찍은 사진 아님",privacy:"개인정보 보임"};
-const TAGS=["전체","비교","디테일","사용","결과","포장","단점"];
 const CATS=["식품","생활주방","의류잡화","뷰티","가전디지털","육아반려","가구인테리어","스포츠레저","도서문구","기타"];
 const PERIODS=["당일","2~3일","1주","2주","1개월","3개월 이상"];
 const ACCT={wife:"아내 계정",husband:"남편 계정"};
 
-const S={cfg:null, items:[], reviews:{}, app:null, guide:null, view:"list", sel:null, openId:null, filter:"active", loading:false, err:"", busy:"", photoUrls:{}, demo:false, pollT:null, lastSync:null};
+const S={cfg:null, items:[], reviews:{}, app:null, guide:null, view:"list", sel:null, openId:null, filter:"active", loading:false, err:"", busy:"", photoUrls:{}, demo:false, pollT:null, lastSync:null,
+  drafts:{}, notesBuiltFor:null, notesRefresh:null, pendingRender:false};
 const $=(s,r=document)=>r.querySelector(s);
 function h(tag,attrs,...kids){ const el=document.createElement(tag); if(attrs) for(const [k,v] of Object.entries(attrs)){ if(v==null||v===false) continue; if(k==="class") el.className=v; else if(k==="text") el.textContent=v; else if(k.startsWith("on")) el.addEventListener(k.slice(2),v); else if(v===true) el.setAttribute(k,""); else el.setAttribute(k,v);} for(const k of kids.flat()){ if(k==null||k===false) continue; el.append(k.nodeType?k:document.createTextNode(String(k))); } return el; }
 function toast(m){ const t=$("#toast"); t.textContent=m; t.hidden=false; clearTimeout(toast._t); toast._t=setTimeout(()=>t.hidden=true,2800); }
@@ -163,6 +164,13 @@ function readHash(){
   if(i) S.openId=i;
 }
 
+// ---------- 입력 중인 메모 임시 저장 (화면이 다시 그려져도, 앱을 닫아도 남음) ----------
+function draftKey(id){ return "rl.draft."+id; }
+function getDraft(id){ if(S.drafts[id]) return S.drafts[id]; try{ const d=JSON.parse(localStorage.getItem(draftKey(id))||"null"); if(d){ S.drafts[id]=d; return d; } }catch(e){} return null; }
+function setDraft(id,d){ S.drafts[id]=d; try{ localStorage.setItem(draftKey(id),JSON.stringify(d)); }catch(e){} }
+function clearDraft(id){ delete S.drafts[id]; try{ localStorage.removeItem(draftKey(id)); }catch(e){} }
+function typingNow(){ const a=document.activeElement; return !!(a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && $("#app") && $("#app").contains(a) && a.type!=="file"); }
+
 // ---------- 서버 API ----------
 async function api(path,opts={}){
   if(S.demo) return demoApi(path,opts);
@@ -180,12 +188,13 @@ function errMsg(e,fallback){ if(e&&e.code==="auth") return "열쇠가 맞지 않
 const demo={items:{},reviews:{},photos:{},rules:"# 작성 규칙 (데모)\n\n- 데모 모드라 규칙 전문은 생략합니다."};
 function demoApi(path,opts){
   const u=new URL("https://demo.local"+path); const parts=u.pathname.replace(/^\/api\/?/,"").split("/").filter(Boolean); const m=(opts.method||"GET").toUpperCase();
-  const ok=o=>Promise.resolve(o), nf=()=>Promise.reject({code:"notfound",status:404,message:"없음"});
+  const ok=o=>new Promise(r=>setTimeout(()=>r(o),120)), nf=()=>Promise.reject({code:"notfound",status:404,message:"없음"});
   if(parts[0]==="config") return ok({name:"리뷰 공방 (데모)",wakePr:1,account:"wife"});
   if(parts[0]==="items"&&parts.length===1&&m==="GET") return ok({items:Object.values(demo.items).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)))});
   if(parts[0]==="items"&&parts.length===1&&m==="POST"){ const b=JSON.parse(opts.body); const now=nowIso(); const it=Object.assign({id:"it_demo_"+Math.random().toString(36).slice(2,7),account:"wife",status:"collected",photos:[],notes:{},createdAt:now,updatedAt:now,qty:1,option:"",category:"",isTrial:false,trialInvitedAt:""},b,{isTrial:!!b.trialInvitedAt}); demo.items[it.id]=it; return ok({item:it}); }
-  if(parts[0]==="items"&&parts.length===2&&m==="PATCH"){ const it=demo.items[parts[1]]; if(!it) return nf(); const p=JSON.parse(opts.body); if(p.notes) it.notes=Object.assign({},it.notes,p.notes,{pros:Array.isArray(p.notes.pros)?p.notes.pros:String(p.notes.pros||"").split("\n").filter(Boolean),cons:Array.isArray(p.notes.cons)?p.notes.cons:String(p.notes.cons||"").split("\n").filter(Boolean)}); for(const k of ["productName","option","category","orderDate","trialInvitedAt","helpfulCount"]) if(p[k]!==undefined) it[k]=p[k]; if(p.photoTags) it.photos=it.photos.map((x,i)=>Object.assign({},x,{tag:p.photoTags[i]||""})); if(p.status==="ready"){ const n=it.notes; if(!(n.rating>0&&n.oneLine&&(n.pros||[]).length&&(n.cons||[]).length&&n.period&&it.photos.length)) return Promise.reject({code:"http",status:400,message:"아직 모자라요: 별점·한 줄·좋은 점·아쉬운 점·기간·사진"}); it.status="ready"; it.requestedAt=nowIso(); setTimeout(()=>{ it.status="drafted"; demo.reviews[it.id]={draft:{body:"(데모) "+(n.oneLine||"")+"\n\n실제로는 메모와 사진을 바탕으로 400~650자 완성본이 여기에 와요.",chars:60,rating:n.rating,photoPlan:it.photos.map((p,i)=>({file:p.file,order:i+1,caption:p.tag||"사진"})),score:{total:84,parts:{}},questions:[],warnings:[]},photoCheck:{verdict:"ok",summary:"데모",photos:it.photos.map(p=>({file:p.file,verdict:"match",flags:[],note:"데모"}))},model:"claude-opus-5-5",draftedAt:nowIso()}; it.updatedAt=nowIso(); },4000); } else if(p.status) it.status=p.status; it.updatedAt=nowIso(); return ok({item:it,woke:true}); }
-  if(parts[0]==="items"&&parts.length===3&&parts[2]==="photos"&&m==="POST"){ const it=demo.items[parts[1]]; if(!it) return nf(); const n=it.photos.length+1; const file="photos/"+it.id+"/"+String(n).padStart(2,"0")+".jpg"; demo.photos[file]=opts.body; it.photos=[...it.photos,{file,tag:decodeURIComponent(u.searchParams.get("tag")||"")}]; return ok({item:it,file}); }
+  if(parts[0]==="items"&&parts.length===2&&m==="PATCH"){ const it=demo.items[parts[1]]; if(!it) return nf(); const p=JSON.parse(opts.body); if(p.notes) it.notes=Object.assign({},it.notes,p.notes,{pros:Array.isArray(p.notes.pros)?p.notes.pros:String(p.notes.pros||"").split("\n").filter(Boolean),cons:Array.isArray(p.notes.cons)?p.notes.cons:String(p.notes.cons||"").split("\n").filter(Boolean)}); for(const k of ["productName","option","category","orderDate","trialInvitedAt","helpfulCount"]) if(p[k]!==undefined) it[k]=p[k]; if(p.status==="ready"){ const n=it.notes; if(!(n.rating>0&&n.oneLine&&(n.pros||[]).length&&(n.cons||[]).length&&n.period&&it.photos.length)) return Promise.reject({code:"http",status:400,message:"아직 모자라요: 별점·한 줄·좋은 점·아쉬운 점·기간·사진"}); it.status="ready"; it.requestedAt=nowIso(); setTimeout(()=>{ it.status="drafted"; demo.reviews[it.id]={draft:{body:"(데모) "+(n.oneLine||"")+"\n\n실제로는 메모와 사진을 바탕으로 400~650자 완성본이 여기에 와요.",chars:60,rating:n.rating,photoPlan:it.photos.map((p,i)=>({file:p.file,order:i+1,caption:"사진 "+(i+1)})),score:{total:84,parts:{}},questions:[],warnings:[]},photoCheck:{verdict:"ok",summary:"데모",photos:it.photos.map(p=>({file:p.file,verdict:"match",flags:[],note:"데모"}))},model:"claude-opus-5-5",draftedAt:nowIso()}; it.updatedAt=nowIso(); },4000); } else if(p.status) it.status=p.status; it.updatedAt=nowIso(); return ok({item:it,woke:true}); }
+  if(parts[0]==="items"&&parts.length===4&&parts[2]==="photos"&&parts[3]==="batch"&&m==="POST"){ const it=demo.items[parts[1]]; if(!it) return nf(); const list=opts.body.getAll("photos"); const files=[]; for(const b of list){ const n=it.photos.length+1; const file="photos/"+it.id+"/"+String(n).padStart(2,"0")+".jpg"; demo.photos[file]=b; it.photos=[...it.photos,{file,tag:""}]; files.push(file); } return ok({item:it,files}); }
+  if(parts[0]==="items"&&parts.length===3&&parts[2]==="photos"&&m==="POST"){ const it=demo.items[parts[1]]; if(!it) return nf(); const n=it.photos.length+1; const file="photos/"+it.id+"/"+String(n).padStart(2,"0")+".jpg"; demo.photos[file]=opts.body; it.photos=[...it.photos,{file,tag:""}]; return ok({item:it,file}); }
   if(parts[0]==="items"&&parts.length===4&&m==="DELETE"){ const it=demo.items[parts[1]]; if(!it) return nf(); const file="photos/"+it.id+"/"+parts[3]; it.photos=it.photos.filter(p=>p.file!==file); return ok({item:it}); }
   if(parts[0]==="photo"){ const b=demo.photos[u.searchParams.get("path")]; return b? ok({ok:true,blob:()=>Promise.resolve(b)}) : nf(); }
   if(parts[0]==="reviews"){ const rv=demo.reviews[parts[1]]; return rv? ok({review:rv}) : nf(); }
@@ -195,7 +204,7 @@ function demoApi(path,opts){
 }
 function seedDemo(){
   const now=nowIso(); const a="it_demo_a1", b="it_demo_b2";
-  demo.items[a]={id:a,account:"wife",productName:"락앤락 비스프리 모듈러 밀폐용기 1.2L 4개",option:"투명",qty:1,orderDate:kst(),category:"생활주방",status:"drafted",photos:[],notes:{rating:5,oneLine:"뚜껑이 한 손으로 열려요",pros:["물때가 안 생김"],cons:["없음"],period:"2주",usage:"반찬 보관",forWhom:"자취생"},createdAt:now,updatedAt:now};
+  demo.items[a]={id:a,account:"wife",productName:"락앤락 비스프리 모듈러 밀폐용기 1.2L 4개",option:"투명",qty:1,orderDate:kst(),category:"생활주방",status:"drafted",photos:[],notes:{rating:5,oneLine:"뚜껑이 한 손으로 열려요",pros:["물때가 안 생김"],cons:["없음"],period:"2주",extra:"반찬 보관용, 자취생 추천"},createdAt:now,updatedAt:now};
   demo.reviews[a]={draft:{body:"2주 동안 반찬 보관용으로 썼는데 뚜껑이 한 손으로 열리는 게 제일 편했어요.\n\n(데모 본문입니다. 실제로는 메모와 사진을 바탕으로 400~650자 완성본이 들어옵니다.)",chars:120,rating:5,photoPlan:[],score:{total:86,parts:{}},questions:[],warnings:[]},photoCheck:{verdict:"ok",summary:"사진 없음(데모)",photos:[]},model:"claude-opus-5-5",draftedAt:now};
   demo.items[b]={id:b,account:"wife",productName:"에어팟 프로 3 실리콘 케이스",option:"블랙",qty:1,orderDate:kst(),category:"가전디지털",status:"collected",photos:[],notes:{},createdAt:now,updatedAt:now};
 }
@@ -226,30 +235,39 @@ async function createItem(o){
   catch(e){ toast(errMsg(e,"접수하지 못했어요. 다시 시도해 주세요.")); return null; }
 }
 
-// ---------- 사진 ----------
+// ---------- 사진 (한 번에 묶어서 올림) ----------
 function loadImage(url){ return new Promise((res,rej)=>{ const im=new Image(); im.onload=()=>res(im); im.onerror=()=>rej(new Error("decode")); im.src=url; }); }
-async function shrink(file){ const url=URL.createObjectURL(file); try{ const img=await loadImage(url); const max=1600, w=img.naturalWidth, hh=img.naturalHeight, s=Math.min(1,max/Math.max(w,hh)); const cw=Math.max(1,Math.round(w*s)), ch=Math.max(1,Math.round(hh*s)); const c=document.createElement("canvas"); c.width=cw; c.height=ch; c.getContext("2d").drawImage(img,0,0,cw,ch); const blob=await new Promise(r=>c.toBlob(r,"image/jpeg",0.85)); if(!blob) throw new Error("encode"); return blob; } finally{ URL.revokeObjectURL(url); } }
+async function shrink(file){ const url=URL.createObjectURL(file); try{ const img=await loadImage(url); const max=1400, w=img.naturalWidth, hh=img.naturalHeight, s=Math.min(1,max/Math.max(w,hh)); const cw=Math.max(1,Math.round(w*s)), ch=Math.max(1,Math.round(hh*s)); const c=document.createElement("canvas"); c.width=cw; c.height=ch; c.getContext("2d").drawImage(img,0,0,cw,ch); const blob=await new Promise(r=>c.toBlob(r,"image/jpeg",0.82)); if(!blob) throw new Error("encode"); return blob; } finally{ URL.revokeObjectURL(url); } }
 async function uploadPhotos(it,files){
-  if(!files||!files.length) return; const list=Array.from(files).slice(0,10); S.busy="사진 올리는 중 0/"+list.length; render();
-  let done=0; const errs=[];
-  for(const f of list){
-    try{ const blob=await shrink(f); const r=await api("/api/items/"+encodeURIComponent(it.id)+"/photos",{method:"POST",headers:{"Content-Type":"image/jpeg"},body:blob}); replaceItem(r.item); S.photoUrls[r.file]=URL.createObjectURL(blob); done++; S.busy="사진 올리는 중 "+done+"/"+list.length; render(); }
-    catch(e){ errs.push((f.name||"사진")+": "+(e&&e.code==="auth"?"열쇠 오류":(e&&e.message)||"읽을 수 없는 형식")); }
+  if(!files||!files.length||S.busy) return; const list=Array.from(files).slice(0,10);
+  const setBusy=t=>{ S.busy=t; renderPhotos(); };
+  const blobs=[]; const errs=[];
+  for(let i=0;i<list.length;i++){ setBusy("사진 준비 중 "+(i+1)+"/"+list.length); try{ blobs.push(await shrink(list[i])); }catch(e){ errs.push((list[i].name||"사진")+": 읽을 수 없는 형식"); } }
+  if(blobs.length){
+    setBusy("올리는 중… "+blobs.length+"장");
+    let done=false;
+    try{ const fd=new FormData(); blobs.forEach((b,i)=>fd.append("photos",b,"p"+(i+1)+".jpg")); const r=await api("/api/items/"+encodeURIComponent(it.id)+"/photos/batch",{method:"POST",body:fd}); replaceItem(r.item); (r.files||[]).forEach((f,i)=>{ if(blobs[i]) S.photoUrls[f]=URL.createObjectURL(blobs[i]); }); done=true; }
+    catch(e){ if(e&&e.code==="auth"){ errs.push("열쇠 오류"); } else if(e&&(e.status===404||e.status===405)){ /* 서버가 아직 일괄 업로드를 모름 → 한 장씩 */ } else { errs.push(e&&e.message||"업로드 실패"); } }
+    if(!done&&!errs.length){ for(let i=0;i<blobs.length;i++){ setBusy("올리는 중 "+(i+1)+"/"+blobs.length); try{ const r=await api("/api/items/"+encodeURIComponent(it.id)+"/photos",{method:"POST",headers:{"Content-Type":"image/jpeg"},body:blobs[i]}); replaceItem(r.item); S.photoUrls[r.file]=URL.createObjectURL(blobs[i]); }catch(e){ errs.push("사진 "+(i+1)+": "+(e&&e.message||"실패")); } } done=true; }
+    if(done) toast(blobs.length+"장 올렸어요");
   }
-  S.busy=""; if(done) toast(done+"장 올렸어요"); if(errs.length) toast("올리지 못한 사진: "+errs.join(", ")); render();
+  if(errs.length) toast("올리지 못한 사진: "+errs.join(", "));
+  S.busy=""; renderPhotos(); if(S.notesRefresh) S.notesRefresh();
 }
-async function removePhoto(it,i){ const p=(it.photos||[])[i]; if(!p) return; try{ const r=await api("/api/items/"+encodeURIComponent(it.id)+"/photos/"+encodeURIComponent(p.file.split("/").pop()),{method:"DELETE"}); replaceItem(r.item); render(); }catch(e){ toast(errMsg(e,"삭제하지 못했어요")); } }
-async function tagPhoto(it,i,tag){ const tags=(it.photos||[]).map((x,k)=>k===i?tag:(x.tag||"")); await patchItem(it,{photoTags:tags}); }
+async function removePhoto(it,i){ const p=(it.photos||[])[i]; if(!p) return; try{ const r=await api("/api/items/"+encodeURIComponent(it.id)+"/photos/"+encodeURIComponent(p.file.split("/").pop()),{method:"DELETE"}); replaceItem(r.item); renderPhotos(); if(S.notesRefresh) S.notesRefresh(); }catch(e){ toast(errMsg(e,"삭제하지 못했어요")); } }
 
 // ---------- 화면 ----------
 function render(){
   const app=$("#app");
   if(!S.cfg&&!S.demo){ app.replaceChildren(setupView()); return; }
-  if(S.view==="detail"&&S.sel) app.replaceChildren(header(), detailView());
-  else if(S.view==="new") app.replaceChildren(header(), newView());
+  if(S.view==="detail"&&S.sel){ if(typingNow()){ S.pendingRender=true; return; } renderDetail(); return; }
+  if(typingNow()){ S.pendingRender=true; return; }
+  S.notesBuiltFor=null; S.notesRefresh=null;
+  if(S.view==="new") app.replaceChildren(header(), newView());
   else if(S.view==="settings") app.replaceChildren(header(), settingsView());
   else app.replaceChildren(header(), listView(), h("button",{class:"fab",onclick:()=>{S.view="new"; render(); window.scrollTo(0,0);}},"+ 새 상품"));
 }
+document.addEventListener("focusout",()=>{ setTimeout(()=>{ if(S.pendingRender&&!typingNow()){ S.pendingRender=false; render(); } },200); });
 function header(){
   const sub = S.demo? "데모 모드 · 저장되지 않아요" : (S.loading? "불러오는 중…" : [S.app&&ACCT[S.app.account], S.lastSync? "동기화 "+fmtDT(S.lastSync):null].filter(Boolean).join(" · "));
   const left = S.view==="list"
@@ -284,19 +302,19 @@ function listView(){
   if(trials.length&&trials[0].left<=5) kids.push(h("div",{class:"banner "+(trials[0].left<=2?"crit":"")}, h("strong",{text:"체험단 리뷰 마감 "+(trials[0].left>=0?"D-"+trials[0].left:"지남")+" · "+(trials[0].t.productName||"")})));
   kids.push(h("div",{class:"chips"}, ...filters.map(([k,l])=>h("button",{class:"chip","aria-pressed":String(S.filter===k),onclick:()=>{S.filter=k; render();}},l))));
   if(rows.length) kids.push(h("div",{class:"stack"}, ...rows.map(itemCard)));
-  else kids.push(h("div",{class:"card"}, h("div",{class:"empty"}, h("strong",{text: S.loading? "불러오는 중…" : S.items.length? "이 조건에 맞는 상품이 없어요" : "아직 접수된 상품이 없어요"}), h("span",{text:S.loading?"":"오른쪽 아래 '+ 새 상품'을 눌러 쿠팡 주문목록의 상품명을 적어 주세요. 피클에게 \"리뷰 공방에 ○○ 접수해 줘\"라고 해도 돼요."}))));
+  else kids.push(h("div",{class:"card"}, h("div",{class:"empty"}, h("strong",{text: S.loading? "불러오는 중…" : S.items.length? "이 조건에 맞는 상품이 없어요" : "아직 접수된 상품이 없어요"}), h("span",{text:S.loading?"":"오른쪽 아래 '+ 새 상품'을 눌러 쿠팡 주문목록의 상품명을 적어 주세요."}))));
   if(need) kids.push(h("p",{class:"hint",text:"사진·메모가 필요한 상품 "+need+"개. 사진 4장과 한 줄 메모면 충분해요."}));
   return h("div",{class:"stack"},...kids);
 }
 function itemCard(it){
-  const first=(it.photos||[])[0]; const d=daysSince(it.deliveredAt||it.orderDate);
+  const first=(it.photos||[])[0]; const d=daysSince(it.deliveredAt||it.orderDate); const dr=getDraft(it.id);
   const th=h("div",{class:"thumb"}, first? "":"사진 없음");
   if(first){ getBlobUrl(first.file).then(u=>{ th.replaceChildren(h("img",{src:u,alt:""})); }).catch(()=>{}); }
   return h("button",{class:"item",onclick:()=>{S.sel=it.id; S.view="detail"; render(); window.scrollTo(0,0);}},
     th,
     h("div",{class:"stack",style:"gap:3px;min-width:0"},
       h("div",{class:"t",text:it.productName||"(상품명 없음)"}),
-      h("div",{class:"m"}, h("span",{class:"pill "+(it.status||""),text:STATUS[it.status]||it.status}), it.isTrial? h("span",{class:"pill trial",text:"체험단"}):null, h("span",{text:[it.orderDate?fmtDate(it.orderDate):null, d!=null?"D+"+d:null, "사진 "+((it.photos||[]).length)].filter(Boolean).join(" · ")}))));
+      h("div",{class:"m"}, h("span",{class:"pill "+(it.status||""),text:STATUS[it.status]||it.status}), it.isTrial? h("span",{class:"pill trial",text:"체험단"}):null, dr&&isActive(it)? h("span",{class:"pill",text:"쓰던 메모 있음"}):null, h("span",{text:[it.orderDate?fmtDate(it.orderDate):null, d!=null?"D+"+d:null, "사진 "+((it.photos||[]).length)].filter(Boolean).join(" · ")}))));
 }
 function newView(){
   const g=id=>document.getElementById(id)?.value.trim()||"";
@@ -312,19 +330,32 @@ function newView(){
       h("div",{class:"field wide"},h("label",{for:"n-trial",text:"체험단 초대일 (체험단 상품만)"}),h("input",{type:"date",id:"n-trial"}))),
     h("button",{class:"btn primary block",onclick:async()=>{ const name=g("n-name"); if(!name){ toast("상품명을 적어 주세요"); return; } if(S.items.find(i=>i.productName===name&&i.orderDate===g("n-date"))){ toast("같은 날 같은 상품이 이미 있어요"); return; } const it=await createItem({productName:name,option:g("n-opt"),qty:Number(g("n-qty"))||1,orderDate:g("n-date"),deliveredAt:g("n-deliv"),category:g("n-cat"),trialInvitedAt:g("n-trial")}); if(it){ toast("접수했어요. 사진과 메모를 채워 주세요."); S.sel=it.id; S.view="detail"; render(); window.scrollTo(0,0); } }},"접수하고 사진 올리기"));
 }
-function detailView(){
-  const it=S.items.find(i=>i.id===S.sel); if(!it){ S.view="list"; return listView(); }
+
+// ---- 상세: 섹션을 따로 그려서 입력 중인 메모가 지워지지 않게 ----
+function renderDetail(){
+  const app=$("#app"); const it=S.items.find(i=>i.id===S.sel);
+  if(!it){ S.view="list"; render(); return; }
+  let root=$("#detail");
+  if(!root||root.dataset.id!==it.id){
+    root=h("div",{id:"detail",class:"stack","data-id":it.id}, h("div",{id:"d-head"}), h("div",{id:"d-review"}), h("div",{id:"d-photos"}), h("div",{id:"d-notes"}), h("div",{id:"d-order"}));
+    app.replaceChildren(header(), root); S.notesBuiltFor=null; S.notesRefresh=null;
+  } else { app.firstElementChild.replaceWith(header()); }
   const rv=S.reviews[it.id]; const ro=!isActive(it);
+  $("#d-head").replaceChildren(headCard(it));
+  $("#d-review").replaceChildren(...((rv&&rv.draft&&it.status!=="mismatch")? [reviewCard(it,rv)] : []));
+  renderPhotos();
+  if(S.notesBuiltFor!==it.id || !getDraft(it.id)){ $("#d-notes").replaceChildren(notesCard(it,ro)); S.notesBuiltFor=it.id; }
+  else if(S.notesRefresh) S.notesRefresh();
+  $("#d-order").replaceChildren(orderCard(it));
+}
+function renderPhotos(){ const it=S.items.find(i=>i.id===S.sel); const el=$("#d-photos"); if(!it||!el) return; el.replaceChildren(photosCard(it,S.reviews[it.id],!isActive(it))); }
+function headCard(it){
   const idx=["collected","ready","drafted","posted"].indexOf(it.status==="drafting"?"ready":it.status==="mismatch"?"collected":it.status);
   const steps=["접수","사진·메모 완료","리뷰 완성","게시"].map((l,i)=>h("span",{class:"step"+(i<idx?" done":i===idx?" now":""),text:l}));
   const kids=[h("div",{class:"card"}, h("div",{class:"row between"}, h("h2",{text:it.productName||"(상품명 없음)"}), h("span",{class:"pill "+(it.status||""),text:STATUS[it.status]||it.status})), h("div",{class:"steps"},...steps),
     h("div",{class:"hint",text:[it.option?"옵션 "+it.option:null, it.qty?it.qty+"개":null, it.orderDate?"주문 "+fmtDate(it.orderDate):null, it.category||null, it.isTrial&&it.trialInvitedAt? "체험단 리뷰 마감 "+addDays(it.trialInvitedAt,14):null].filter(Boolean).join(" · ")}))];
   if(it.status==="ready"||it.status==="drafting") kids.push(h("div",{class:"banner info"}, h("div",{class:"row"}, h("span",{class:"spin"}), h("strong",{text: it.status==="drafting"? "리뷰를 쓰는 중이에요" : "작성 대기 중이에요"})), h("span",{class:"hint",text:"보통 1~5분, 늦어도 몇 시간 안에 완성돼요. 이 화면은 자동으로 새로고침돼요. 앱을 닫아도 괜찮아요."})));
   if(it.lastError&&it.status==="ready") kids.push(h("div",{class:"banner"},h("span",{text:"지난 시도에서 문제가 있었어요: "+it.lastError+" (다시 시도 중)"})));
-  if(rv&&rv.draft&&it.status!=="mismatch") kids.push(reviewCard(it,rv));
-  kids.push(photosCard(it,rv,ro));
-  kids.push(notesCard(it,ro));
-  kids.push(orderCard(it));
   return h("div",{class:"stack"},...kids);
 }
 function reviewCard(it,rv){
@@ -339,7 +370,7 @@ function reviewCard(it,rv){
     h("button",{class:"btn primary block",onclick:()=>copyText(d.body||"",ta)},"본문 복사"),
     h("p",{class:"hint",text:"쿠팡 앱 > 마이쿠팡 > 리뷰 작성에서 별점 "+(d.rating||it.notes?.rating||"-")+"점을 누르고 본문을 붙여 넣은 뒤, 사진은 아래 순서로 올리세요."}),
     plan.length? h("div",{class:"stack"}, h("h3",{class:"muted",text:"사진 순서와 캡션"}), planEl) : null,
-    (d.questions||[]).length? h("div",{class:"banner"}, h("strong",{text:"메모를 조금 더 채우면 더 좋아져요"}), h("ul",{class:"clean"},...d.questions.map(q=>h("li",{text:q})))) : null,
+    (d.questions||[]).length? h("div",{class:"banner"}, h("strong",{text:"다음엔 이것도 한마디 적어 주면 더 좋아져요"}), h("ul",{class:"clean"},...d.questions.map(q=>h("li",{text:q})))) : null,
     (d.warnings||[]).length? h("p",{class:"hint",text:"참고: "+d.warnings.join(" · ")}) : null,
     h("div",{class:"row"},
       it.status!=="posted"? h("button",{class:"btn primary",onclick:async()=>{ if(await patchItem(it,{status:"posted"})){ toast("게시 완료로 표시했어요"); render(); } }},"쿠팡에 올렸어요") : h("span",{class:"pill posted",text:"게시됨 "+fmtDT(it.postedAt)}),
@@ -353,45 +384,48 @@ function photosCard(it,rv,ro){
     const v=byFile[p.file]; const el=h("div",{class:"ph"});
     const img=h("img",{alt:"사진 "+(i+1)}); getBlobUrl(p.file).then(u=>img.src=u).catch(()=>{}); el.append(img);
     if(v){ const [label,cls]=VERDICT[v.verdict]||[v.verdict,""]; el.append(h("div",{}, h("span",{class:"verdict "+cls,text:label}), ...(v.flags||[]).map(f=>h("span",{class:"verdict crit",text:FLAG[f]||f}))), v.note? h("div",{class:"vnote",text:v.note}):null); }
-    el.append(h("select",{"aria-label":"사진 종류",disabled:ro,onchange:e=>tagPhoto(it,i,e.target.value)}, h("option",{value:"",text:"종류 선택"}), ...TAGS.map(t=>h("option",{value:t,text:t,selected:p.tag===t}))));
     el.append(h("div",{class:"x"}, h("span",{class:"hint mono",text:String(i+1).padStart(2,"0")}), ro? null : h("button",{class:"btn sm ghost",onclick:()=>removePhoto(it,i)},"삭제")));
     return el; }),
-    ro? null : h("label",{class:"addph"}, h("span",{text: S.busy||"+ 사진 추가\n(카메라·앨범)"}), h("input",{type:"file",accept:"image/*",multiple:true,disabled:!!S.busy,onchange:e=>uploadPhotos(it,e.target.files)})));
-  const hold = it.status==="mismatch" ? h("div",{class:"banner crit"}, h("strong",{text:"사진 확인이 필요해 리뷰를 쓰지 않았어요: "+((pc&&pc.summary)||"")}), ...(((rv&&rv.photoCheckQuestions)||[]).length? [h("ul",{class:"clean"},...rv.photoCheckQuestions.map(q=>h("li",{text:q})))]:[]), h("span",{class:"hint",text:"맞는 사진으로 바꾼 뒤 아래 '리뷰 요청'을 다시 누르세요. 사진이 정말 맞는다면 '추가 정보'에 \"사진 확인함: 이유\"를 적고 요청하면 돼요."})) : null;
+    ro? null : h("label",{class:"addph"+(S.busy?" busy":"")}, S.busy? h("span",{class:"spin"}):null, h("span",{text: S.busy||"+ 사진 추가\n(여러 장 한 번에)"}), h("input",{type:"file",accept:"image/*",multiple:true,disabled:!!S.busy,onchange:e=>uploadPhotos(it,e.target.files)})));
+  const hold = it.status==="mismatch" ? h("div",{class:"banner crit"}, h("strong",{text:"사진 확인이 필요해 리뷰를 쓰지 않았어요: "+((pc&&pc.summary)||"")}), ...(((rv&&rv.photoCheckQuestions)||[]).length? [h("ul",{class:"clean"},...rv.photoCheckQuestions.map(q=>h("li",{text:q})))]:[]), h("span",{class:"hint",text:"맞는 사진으로 바꾼 뒤 아래 '리뷰 요청'을 다시 누르세요. 사진이 정말 맞는다면 '더 할 말'에 \"사진 확인함: 이유\"를 적고 요청하면 돼요."})) : null;
   return h("div",{class:"card"}, h("div",{class:"row between"}, h("h2",{text:"사진 "+photos.length+"장"}), h("span",{class:"check"},h("span",{class:"c"+(photos.length>=4?" ok":""),text:photos.length>=4?"4장 이상 ✓":"4장 이상 권장"}))), hold, grid,
-    h("p",{class:"hint",text:"전체 실물 · 손이나 자와 크기 비교 · 라벨/디테일 · 사용 장면 · 결과 순으로 4~7장이면 충분해요. 올릴 때 자동으로 줄이고 위치 정보를 지워요. 쿠팡에는 원본을 올리세요."}));
+    h("p",{class:"hint",text:"전체 실물 · 손이나 자와 크기 비교 · 라벨 · 쓰는 장면 순으로 4~7장. 앨범에서 여러 장을 한 번에 고르면 한 번에 올라가요. 종류는 공방이 알아서 판단해요."}));
 }
 function notesCard(it,ro){
-  const n=it.notes||{}; let rating=n.rating||0;
-  const stars=h("div",{class:"stars"}, ...[1,2,3,4,5].map(v=>h("button",{class:"star"+(rating>=v?" on":""),type:"button","aria-label":v+"점",disabled:ro,onclick:()=>{ rating=v; [...stars.children].forEach((b,k)=>b.classList.toggle("on",k<v)); refresh(); }},"★")));
-  const f=(id,label,ctl,wide)=>h("div",{class:"field"+(wide?" wide":"")},h("label",{for:id,text:label}),ctl);
-  const inp=(id,val,ph)=>h("input",{type:"text",id,value:val||"",placeholder:ph||"",disabled:ro,oninput:refresh});
-  const ta=(id,val,ph,rows)=>h("textarea",{id,placeholder:ph||"",disabled:ro,rows:rows||2,oninput:refresh},val||"");
+  const base=it.notes||{}; const dr=getDraft(it.id)||{};
+  const v=k=>(dr[k]!==undefined? dr[k] : base[k]);
+  let rating=Number(v("rating"))||0;
+  const stars=h("div",{class:"stars"}, ...[1,2,3,4,5].map(n=>h("button",{class:"star"+(rating>=n?" on":""),type:"button","aria-label":n+"점",disabled:ro,onclick:()=>{ rating=n; [...stars.children].forEach((b,k)=>b.classList.toggle("on",k<n)); changed(); }},"★")));
+  const f=(id,label,ctl)=>h("div",{class:"field wide"},h("label",{for:id,text:label}),ctl);
+  const inp=(id,val,ph)=>h("input",{type:"text",id,value:val||"",placeholder:ph||"",disabled:ro,oninput:changed,autocomplete:"off"});
+  const ta=(id,val,ph,rows)=>h("textarea",{id,placeholder:ph||"",disabled:ro,rows:rows||2,oninput:changed},val||"");
+  const joinLines=x=>Array.isArray(x)? x.join("\n") : (x||"");
   const form=h("div",{class:"fields"},
-    f("f-stars","별점 (솔직하게)",stars,true),
-    f("f-one","한 줄 느낌 (평소 말투 그대로)",inp("f-one",n.oneLine,"예) 생각보다 작은데 소리는 확실히 조용해요"),true),
-    f("f-pros","좋았던 점 (한 줄에 하나)",ta("f-pros",(n.pros||[]).join("\n"),"예) 뚜껑이 한 손으로 열림"),true),
-    f("f-cons","아쉬운 점 (없으면 '없음')",ta("f-cons",(n.cons||[]).join("\n"),"예) 전원선이 짧아요"),true),
-    f("f-period","얼마나 썼나요",h("select",{id:"f-period",disabled:ro,onchange:refresh},h("option",{value:"",text:"선택"}),...PERIODS.map(p=>h("option",{value:p,text:p,selected:n.period===p})))),
-    f("f-usage","어떻게·어디서",inp("f-usage",n.usage,"예) 2인 아침 식사용")),
-    f("f-for","추천하고 싶은 사람",inp("f-for",n.forWhom,"예) 자취생"),true),
-    f("f-extra","추가 정보 (의류: 키·몸무게·사이즈 / 식품: 조리법·양 / 가전: 소음·설치)",ta("f-extra",n.extra,"",2),true));
-  const ready=h("div",{class:"check"});
-  function read(){ const g=id=>document.getElementById(id)?.value.trim()||""; const lines=v=>v.split("\n").map(s=>s.trim()).filter(Boolean); return {rating,oneLine:g("f-one"),pros:lines(g("f-pros")),cons:lines(g("f-cons")),period:g("f-period"),usage:g("f-usage"),forWhom:g("f-for"),extra:g("f-extra")}; }
-  function checks(nn){ const ph=(it.photos||[]).length; return [{ok:nn.rating>0,t:"별점"},{ok:!!nn.oneLine,t:"한 줄"},{ok:nn.pros.length>0,t:"좋은 점"},{ok:nn.cons.length>0,t:"아쉬운 점"},{ok:!!nn.period,t:"기간"},{ok:ph>=1,t:"사진 "+ph+"장"}]; }
+    f("f-stars","별점",stars),
+    f("f-one","한 줄 느낌 (평소 말투 그대로)",inp("f-one",v("oneLine"),"예) 생각보다 작은데 소리는 확실히 조용해요")),
+    f("f-pros","좋았던 점 (한 줄에 하나)",ta("f-pros",joinLines(v("pros")),"예) 뚜껑이 한 손으로 열림")),
+    f("f-cons","아쉬운 점 (없으면 '없음')",ta("f-cons",joinLines(v("cons")),"예) 전원선이 짧아요")),
+    f("f-period","얼마나 썼나요",h("select",{id:"f-period",disabled:ro,onchange:changed},h("option",{value:"",text:"선택"}),...PERIODS.map(p=>h("option",{value:p,text:p,selected:v("period")===p})))),
+    f("f-extra","더 할 말 (선택) — 어디에 어떻게 썼는지, 누구에게 추천, 옷이면 키·몸무게·사이즈, 음식이면 맛·양",ta("f-extra",v("extra"),"",3)));
+  const ready=h("div",{class:"check"}); const saved=h("span",{class:"saved"});
+  function read(){ const g=id=>document.getElementById(id)?.value.trim()||""; const lines=x=>x.split("\n").map(s=>s.trim()).filter(Boolean); return {rating,oneLine:g("f-one"),pros:lines(g("f-pros")),cons:lines(g("f-cons")),period:g("f-period"),extra:g("f-extra")}; }
+  function checks(nn){ const cur=S.items.find(i=>i.id===it.id)||it; const ph=(cur.photos||[]).length; return [{ok:nn.rating>0,t:"별점"},{ok:!!nn.oneLine,t:"한 줄"},{ok:nn.pros.length>0,t:"좋은 점"},{ok:nn.cons.length>0,t:"아쉬운 점"},{ok:!!nn.period,t:"기간"},{ok:ph>=1,t:"사진 "+ph+"장"}]; }
   let btn;
   function refresh(){ const c=checks(read()); ready.replaceChildren(...c.map(x=>h("span",{class:"c"+(x.ok?" ok":""),text:x.t+(x.ok?" ✓":"")}))); if(btn) btn.disabled = ro || !c.every(x=>x.ok) || !!S.busy; }
+  function changed(){ if(!document.getElementById("f-one")) return; const nn=read(); setDraft(it.id,nn); saved.textContent="이 폰에 임시 저장됨 "+new Date().toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit"}); refresh(); }
+  S.notesRefresh=refresh;
   btn=h("button",{class:"btn primary block",disabled:ro,onclick:async()=>{
     const nn=read(); if(!checks(nn).every(x=>x.ok)){ toast("별점·한 줄·좋은 점·아쉬운 점·기간·사진 1장이 있어야 요청할 수 있어요"); return; }
     btn.disabled=true; btn.textContent="요청하는 중…";
-    const saved=await patchItem(it,{notes:nn});
-    const r = saved? await patchItem(saved.item,{status:"ready"}) : null;
-    if(r){ toast(r.woke? "요청했어요. 보통 1~5분 안에 리뷰가 와요." : "요청했어요. 엔진이 다음 실행에 리뷰를 써요."); render(); window.scrollTo(0,0); schedulePoll(); }
+    const cur=S.items.find(i=>i.id===it.id)||it;
+    const savedR=await patchItem(cur,{notes:nn});
+    const r = savedR? await patchItem(savedR.item,{status:"ready"}) : null;
+    if(r){ clearDraft(it.id); toast(r.woke? "요청했어요. 보통 1~5분 안에 리뷰가 와요." : "요청했어요. 엔진이 다음 실행에 리뷰를 써요."); S.notesBuiltFor=null; render(); window.scrollTo(0,0); schedulePoll(); }
     else { btn.disabled=false; btn.textContent="리뷰 요청"; }
   }}, ["drafted","ready","drafting","mismatch"].includes(it.status)? "다시 리뷰 요청" : "리뷰 요청");
-  const save=h("button",{class:"btn",disabled:ro,onclick:async()=>{ if(await patchItem(it,{notes:read()})) toast("메모를 저장했어요"); }},"메모만 저장");
+  const save=h("button",{class:"btn",disabled:ro,onclick:async()=>{ const cur=S.items.find(i=>i.id===it.id)||it; if(await patchItem(cur,{notes:read()})){ clearDraft(it.id); toast("메모를 저장했어요"); S.notesBuiltFor=null; render(); } }},"메모만 저장");
   setTimeout(refresh,0);
-  return h("div",{class:"card"}, h("h2",{text:"경험 메모"}), h("p",{class:"hint",text:"리뷰는 여기 적은 것만 경험으로 써요. 짧아도 좋으니 사실만. 요청하면 사진이 그 상품이 맞는지 먼저 확인하고 리뷰를 써요."}), form, ready, h("div",{class:"sticky"}, save, btn));
+  return h("div",{class:"card"}, h("div",{class:"row between"}, h("h2",{text:"경험 메모"}), saved), h("p",{class:"hint",text:"적는 대로 이 폰에 임시 저장되니 사진을 올리거나 앱을 닫았다 열어도 안 지워져요. 사실만 짧게."}), form, ready, h("div",{class:"sticky"}, save, btn));
 }
 function orderCard(it){
   const g=id=>document.getElementById(id)?.value.trim()||"";
@@ -404,7 +438,7 @@ function orderCard(it){
       h("div",{class:"field"},h("label",{for:"o-trial",text:"체험단 초대일"}),h("input",{type:"date",id:"o-trial",value:it.trialInvitedAt||""}))),
     h("div",{class:"row",style:"margin-top:10px"},
       h("button",{class:"btn",onclick:async()=>{ if(await patchItem(it,{productName:g("o-name"),option:g("o-opt"),category:g("o-cat"),orderDate:g("o-date"),trialInvitedAt:g("o-trial")})){ toast("저장했어요"); render(); } }},"저장"),
-      isActive(it)? h("button",{class:"btn",onclick:async()=>{ if(await patchItem(it,{status:"skipped"})){ toast("건너뜀으로 표시"); S.view="list"; render(); } }},"이 상품은 건너뛰기") : h("button",{class:"btn",onclick:async()=>{ if(await patchItem(it,{status:"collected"})) render(); }},"다시 진행")),
+      isActive(it)? h("button",{class:"btn",onclick:async()=>{ if(await patchItem(it,{status:"skipped"})){ clearDraft(it.id); toast("건너뜀으로 표시"); S.view="list"; render(); } }},"이 상품은 건너뛰기") : h("button",{class:"btn",onclick:async()=>{ if(await patchItem(it,{status:"collected"})) render(); }},"다시 진행")),
     h("p",{class:"hint mono",text:it.id}));
 }
 function settingsView(){
@@ -418,8 +452,8 @@ function settingsView(){
   else { const ta=h("textarea",{rows:16},guide.text); gcard.append(h("pre",{class:"doc",text:guide.text||"(비어 있음)"}), h("details",{}, h("summary",{text:"수정"}), ta, h("div",{class:"row",style:"margin-top:8px"}, h("button",{class:"btn primary sm",onclick:async()=>{ try{ await api("/api/rules",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({text:ta.value})}); S.guide={text:ta.value}; toast("저장했어요. 다음 리뷰부터 반영돼요."); render(); }catch(e){ toast(errMsg(e,"저장하지 못했어요")); } }},"저장")))); }
   box.append(gcard);
   box.append(h("div",{class:"card"}, h("h2",{text:"쓰는 법"}), h("ol",{class:"clean"},
-    h("li",{text:"'+ 새 상품'에 쿠팡 주문목록의 상품명을 붙여 넣고 접수. (피클에게 \"리뷰 공방에 ○○ 접수해 줘\"라고 해도 같은 곳에 들어가요.)"}),
-    h("li",{text:"사진 4~7장 올리고(전체·크기 비교·라벨·사용 장면), 별점과 한 줄 메모·좋은 점·아쉬운 점·기간을 적은 뒤 '리뷰 요청'."}),
+    h("li",{text:"'+ 새 상품'에 쿠팡 주문목록의 상품명을 붙여 넣고 접수."}),
+    h("li",{text:"사진 4~7장을 한 번에 골라 올리고(전체·크기 비교·라벨·쓰는 장면), 별점·한 줄·좋은 점·아쉬운 점·기간을 적은 뒤 '리뷰 요청'. 적는 동안 자동으로 임시 저장돼요."}),
     h("li",{text:"보통 1~5분 뒤 '리뷰 완성'으로 바뀌면 열어서 '본문 복사' → 쿠팡 앱 리뷰 작성에 붙여넣기 → 사진은 안내 순서대로 → 등록."}),
     h("li",{text:"등록했으면 '쿠팡에 올렸어요'를 눌러 기록."}),
     h("li",{text:"체험단 초대 문자가 오면 새 상품 접수 때 초대일을 적으세요. 리뷰 마감(초대일+14일)을 세어 줘요."}))));

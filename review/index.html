@@ -8,7 +8,7 @@
 <title>리뷰 공방</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600&display=swap">
 <style>
-/* 아내용 폰 앱: 목록 → 상품 상세(사진·메모·리뷰) 한 화면 흐름. 남편 GitHub 비공개 저장소가 서버 역할. */
+/* 아내용 폰 앱: 목록 → 상품 상세(사진·메모·리뷰). 데이터는 남편의 리뷰 공방 서버(Cloudflare Worker)를 통해서만 오간다. */
 :root{
   --bg:#F2F4F6; --surface:#FFFFFF; --surface-2:#E9EDF1; --ink:#182029; --ink-2:#4B5663; --ink-3:#7B8794; --line:#D6DCE3;
   --accent:#0E7C7B; --accent-ink:#FFFFFF; --accent-soft:#D8F0EE;
@@ -86,7 +86,7 @@ textarea{resize:vertical;min-height:72px}
 .verdict{display:inline-flex;align-items:center;font-size:11px;padding:1px 7px;border-radius:999px;background:var(--surface-2);color:var(--ink-2);margin:0 6px}
 .verdict.good{background:var(--good-soft);color:var(--good)} .verdict.warn{background:var(--warn-soft);color:var(--warn)} .verdict.crit{background:var(--crit-soft);color:var(--crit)}
 .vnote{font-size:11px;color:var(--ink-3);padding:0 6px}
-.addph{border:1.5px dashed var(--line);border-radius:10px;aspect-ratio:1;display:grid;place-items:center;color:var(--ink-2);font-size:13px;text-align:center;padding:6px;background:var(--surface)}
+.addph{border:1.5px dashed var(--line);border-radius:10px;aspect-ratio:1;display:grid;place-items:center;color:var(--ink-2);font-size:13px;text-align:center;padding:6px;background:var(--surface);white-space:pre-line}
 .addph input{display:none}
 .stars{display:flex;gap:2px}
 .star{background:none;border:0;font-size:34px;line-height:1;color:var(--line);padding:0 2px}
@@ -108,7 +108,7 @@ textarea{resize:vertical;min-height:72px}
 .toast{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:999px;font-size:14px;z-index:20;max-width:calc(100vw - 32px);text-align:center}
 details{border:1px solid var(--line);border-radius:10px;padding:10px 12px}
 summary{cursor:pointer;font-weight:500;color:var(--ink-2)}
-ul.clean{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:3px}
+ul.clean,ol.clean{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:3px}
 .kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:13px}
 .kv dt{color:var(--ink-3)} .kv dd{margin:0;min-width:0}
 .spin{display:inline-block;width:14px;height:14px;border:2px solid var(--accent-soft);border-top-color:var(--accent);border-radius:50%;animation:sp 1s linear infinite}
@@ -129,9 +129,9 @@ const FLAG={stock:"직접 찍은 사진 아님",privacy:"개인정보 보임"};
 const TAGS=["전체","비교","디테일","사용","결과","포장","단점"];
 const CATS=["식품","생활주방","의류잡화","뷰티","가전디지털","육아반려","가구인테리어","스포츠레저","도서문구","기타"];
 const PERIODS=["당일","2~3일","1주","2주","1개월","3개월 이상"];
-const API="https://api.github.com";
+const ACCT={wife:"아내 계정",husband:"남편 계정"};
 
-const S={cfg:null, items:[], shas:{}, reviews:{}, app:null, guide:null, view:"list", sel:null, filter:"active", loading:false, err:"", busy:"", photoUrls:{}, demo:false, pollT:null, lastSync:null};
+const S={cfg:null, items:[], reviews:{}, app:null, guide:null, view:"list", sel:null, openId:null, filter:"active", loading:false, err:"", busy:"", photoUrls:{}, demo:false, pollT:null, lastSync:null};
 const $=(s,r=document)=>r.querySelector(s);
 function h(tag,attrs,...kids){ const el=document.createElement(tag); if(attrs) for(const [k,v] of Object.entries(attrs)){ if(v==null||v===false) continue; if(k==="class") el.className=v; else if(k==="text") el.textContent=v; else if(k.startsWith("on")) el.addEventListener(k.slice(2),v); else if(v===true) el.setAttribute(k,""); else el.setAttribute(k,v);} for(const k of kids.flat()){ if(k==null||k===false) continue; el.append(k.nodeType?k:document.createTextNode(String(k))); } return el; }
 function toast(m){ const t=$("#toast"); t.textContent=m; t.hidden=false; clearTimeout(toast._t); toast._t=setTimeout(()=>t.hidden=true,2800); }
@@ -141,142 +141,100 @@ function fmtDate(s){ if(!s) return "—"; try{ return new Intl.DateTimeFormat("k
 function fmtDT(s){ if(!s) return "—"; try{ return new Intl.DateTimeFormat("ko-KR",{timeZone:"Asia/Seoul",month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"}).format(new Date(s)); }catch(e){ return s; } }
 function daysSince(ymd){ if(!ymd) return null; const a=new Date(ymd.slice(0,10)+"T00:00:00+09:00"), b=new Date(kst()+"T00:00:00+09:00"); return Math.round((b-a)/86400000); }
 function addDays(ymd,n){ const d=new Date(ymd.slice(0,10)+"T00:00:00+09:00"); d.setDate(d.getDate()+n); return kst(d); }
-function newId(){ const d=kst().replace(/-/g,"").slice(2); return "it_"+d+"_"+Math.random().toString(36).slice(2,7); }
 const isActive=it=>!["posted","skipped"].includes(it.status);
-function b64encodeUtf8(str){ const bytes=new TextEncoder().encode(str); return b64bytes(bytes); }
-function b64bytes(bytes){ let s=""; const CH=0x8000; for(let i=0;i<bytes.length;i+=CH) s+=String.fromCharCode.apply(null,bytes.subarray(i,i+CH)); return btoa(s); }
-function b64decodeUtf8(b64){ const bin=atob((b64||"").replace(/\n/g,"")); const bytes=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i); return new TextDecoder().decode(bytes); }
 
-// ---------- config ----------
-function loadCfg(){ try{ const c=JSON.parse(localStorage.getItem("rl.cfg")||"null"); if(c&&c.token&&c.repo) return c; }catch(e){} return null; }
-function saveCfg(c){ try{ localStorage.setItem("rl.cfg",JSON.stringify(c)); }catch(e){} }
+// ---------- 연결 설정 (링크 #s=서버&k=열쇠[&i=상품id]) ----------
+function loadCfg(){ try{ const c=JSON.parse(localStorage.getItem("rl.cfg2")||"null"); if(c&&c.server&&c.key) return c; }catch(e){} return null; }
+function saveCfg(c){ try{ localStorage.setItem("rl.cfg2",JSON.stringify(c)); }catch(e){} }
 function readHash(){
   const hsh=(location.hash||"").slice(1); if(!hsh) return;
   if(hsh==="demo"){ S.demo=true; history.replaceState(null,"",location.pathname+location.search); return; }
   const p=new URLSearchParams(hsh.replace(/^\?/,""));
-  const k=p.get("k"), r=p.get("r");
-  if(k&&r){ const [owner,repo]=r.split("/"); if(owner&&repo){ saveCfg({token:k.trim(),owner,repo,branch:p.get("b")||"main"}); } }
-  history.replaceState(null,"",location.pathname+location.search); // 주소창에서 토큰 제거
+  const s=p.get("s"), k=p.get("k"), i=p.get("i");
+  if(s&&k&&/^https:\/\//.test(s)) saveCfg({server:s.replace(/\/+$/,""),key:k.trim()});
+  if(i) S.openId=i;
+  history.replaceState(null,"",location.pathname+location.search); // 주소창에서 열쇠 제거
 }
 
-// ---------- GitHub contents API (또는 데모 저장소) ----------
-const demoStore={files:{}, comments:[]};
-async function gh(path,opts={}){
+// ---------- 서버 API ----------
+async function api(path,opts={}){
   if(S.demo) return demoApi(path,opts);
-  const r=await fetch(API+path,Object.assign({},opts,{headers:Object.assign({"Authorization":"Bearer "+S.cfg.token,"Accept":"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28"},opts.headers||{})}));
-  if(r.status===401){ throw {code:"auth",status:401}; }
-  if(r.status===404){ throw {code:"notfound",status:404}; }
-  if(r.status===409){ throw {code:"conflict",status:409}; }
-  if(r.status===403){ let m=""; try{ m=(await r.json()).message||""; }catch(e){} throw {code:"forbidden",status:403,message:m}; }
-  if(!r.ok){ let m=""; try{ m=(await r.json()).message||""; }catch(e){} throw {code:"http",status:r.status,message:m}; }
-  if(opts.raw) return r;
-  if(r.status===204) return null;
-  return r.json();
+  const r=await fetch(S.cfg.server+path,Object.assign({},opts,{headers:Object.assign({"X-Key":S.cfg.key},opts.headers||{})}));
+  if(opts.raw){ if(!r.ok) throw {code:r.status===401?"auth":"http",status:r.status}; return r; }
+  let body=null; try{ body=await r.json(); }catch(e){}
+  if(r.status===401) throw {code:"auth",status:401,message:body&&body.error};
+  if(!r.ok) throw {code:r.status===404?"notfound":"http",status:r.status,message:(body&&body.error)||("오류 "+r.status)};
+  return body;
 }
-const repoPath=p=>"/repos/"+S.cfg.owner+"/"+S.cfg.repo+"/contents/"+p.split("/").map(encodeURIComponent).join("/")+"?ref="+encodeURIComponent(S.cfg.branch);
-async function listDir(p){ try{ const a=await gh(repoPath(p)); return Array.isArray(a)?a:[]; }catch(e){ if(e.code==="notfound") return []; throw e; } }
-async function getText(p){ try{ const f=await gh(repoPath(p)); return {text:b64decodeUtf8(f.content),sha:f.sha}; }catch(e){ if(e.code==="notfound") return null; throw e; } }
-async function getJson(p){ const t=await getText(p); if(!t) return null; try{ return {data:JSON.parse(t.text),sha:t.sha}; }catch(e){ return null; } }
-async function getBlobUrl(p){
-  if(S.photoUrls[p]) return S.photoUrls[p];
-  const r=await gh(repoPath(p),{raw:true,headers:{"Accept":"application/vnd.github.raw+json"}});
-  const b=S.demo? r : await r.blob(); const u=URL.createObjectURL(b); S.photoUrls[p]=u; return u;
-}
-async function putFile(p,base64,message,sha){
-  const body={message,content:base64,branch:S.cfg.branch}; if(sha) body.sha=sha;
-  const res=await gh("/repos/"+S.cfg.owner+"/"+S.cfg.repo+"/contents/"+p.split("/").map(encodeURIComponent).join("/"),{method:"PUT",body:JSON.stringify(body)});
-  return res&&res.content? res.content.sha : null;
-}
-async function deleteFile(p,sha,message){ return gh("/repos/"+S.cfg.owner+"/"+S.cfg.repo+"/contents/"+p.split("/").map(encodeURIComponent).join("/"),{method:"DELETE",body:JSON.stringify({message,sha,branch:S.cfg.branch})}); }
-async function putJson(p,obj,message,sha){ return putFile(p,b64encodeUtf8(JSON.stringify(obj,null,2)+"\n"),message,sha); }
-async function wake(text){
-  const n=S.app&&S.app.wakePr; if(!n) return false;
-  try{ await gh("/repos/"+S.cfg.owner+"/"+S.cfg.repo+"/issues/"+n+"/comments",{method:"POST",body:JSON.stringify({body:text})}); return true; }catch(e){ return false; }
-}
-// 데모: 네트워크 없이 화면만 보여 주는 가짜 저장소
+async function getBlobUrl(file){ if(S.photoUrls[file]) return S.photoUrls[file]; const r=await api("/api/photo?path="+encodeURIComponent(file),{raw:true}); const b=await r.blob(); const u=URL.createObjectURL(b); S.photoUrls[file]=u; return u; }
+function errMsg(e,fallback){ if(e&&e.code==="auth") return "열쇠가 맞지 않거나 바뀌었어요. 남편에게 새 링크를 받아 주세요."; return (e&&e.message)||fallback; }
+
+// ---------- 데모(네트워크 없이 화면만) ----------
+const demo={items:{},reviews:{},photos:{},rules:"# 작성 규칙 (데모)\n\n- 데모 모드라 규칙 전문은 생략합니다."};
 function demoApi(path,opts){
-  const m=path.match(/\/contents\/(.+?)(\?|$)/); const p=m? decodeURIComponent(m[1]):"";
-  const method=(opts.method||"GET").toUpperCase();
-  if(path.includes("/issues/")){ demoStore.comments.push(JSON.parse(opts.body).body); return Promise.resolve({id:1}); }
-  if(method==="GET"){
-    if(opts.raw){ const f=demoStore.files[p]; return f&&f.blob? Promise.resolve(f.blob) : Promise.reject({code:"notfound"}); }
-    const f=demoStore.files[p];
-    if(f) return Promise.resolve({content:f.b64,sha:f.sha,name:p.split("/").pop(),path:p});
-    const kids=Object.keys(demoStore.files).filter(k=>k.startsWith(p+"/")).map(k=>k.slice(p.length+1)).filter(k=>!k.includes("/"));
-    if(kids.length) return Promise.resolve(kids.map(name=>({name,path:p+"/"+name,sha:demoStore.files[p+"/"+name].sha,type:"file"})));
-    return Promise.reject({code:"notfound"});
-  }
-  if(method==="PUT"){ const b=JSON.parse(opts.body); const sha=Math.random().toString(36).slice(2,10); demoStore.files[p]={b64:b.content,sha,blob:demoStore.pendingBlob||null}; demoStore.pendingBlob=null; return Promise.resolve({content:{sha}}); }
-  if(method==="DELETE"){ delete demoStore.files[p]; return Promise.resolve(null); }
-  return Promise.reject({code:"http"});
+  const u=new URL("https://demo.local"+path); const parts=u.pathname.replace(/^\/api\/?/,"").split("/").filter(Boolean); const m=(opts.method||"GET").toUpperCase();
+  const ok=o=>Promise.resolve(o), nf=()=>Promise.reject({code:"notfound",status:404,message:"없음"});
+  if(parts[0]==="config") return ok({name:"리뷰 공방 (데모)",wakePr:1,account:"wife"});
+  if(parts[0]==="items"&&parts.length===1&&m==="GET") return ok({items:Object.values(demo.items).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)))});
+  if(parts[0]==="items"&&parts.length===1&&m==="POST"){ const b=JSON.parse(opts.body); const now=nowIso(); const it=Object.assign({id:"it_demo_"+Math.random().toString(36).slice(2,7),account:"wife",status:"collected",photos:[],notes:{},createdAt:now,updatedAt:now,qty:1,option:"",category:"",isTrial:false,trialInvitedAt:""},b,{isTrial:!!b.trialInvitedAt}); demo.items[it.id]=it; return ok({item:it}); }
+  if(parts[0]==="items"&&parts.length===2&&m==="PATCH"){ const it=demo.items[parts[1]]; if(!it) return nf(); const p=JSON.parse(opts.body); if(p.notes) it.notes=Object.assign({},it.notes,p.notes,{pros:Array.isArray(p.notes.pros)?p.notes.pros:String(p.notes.pros||"").split("\n").filter(Boolean),cons:Array.isArray(p.notes.cons)?p.notes.cons:String(p.notes.cons||"").split("\n").filter(Boolean)}); for(const k of ["productName","option","category","orderDate","trialInvitedAt","helpfulCount"]) if(p[k]!==undefined) it[k]=p[k]; if(p.photoTags) it.photos=it.photos.map((x,i)=>Object.assign({},x,{tag:p.photoTags[i]||""})); if(p.status==="ready"){ const n=it.notes; if(!(n.rating>0&&n.oneLine&&(n.pros||[]).length&&(n.cons||[]).length&&n.period&&it.photos.length)) return Promise.reject({code:"http",status:400,message:"아직 모자라요: 별점·한 줄·좋은 점·아쉬운 점·기간·사진"}); it.status="ready"; it.requestedAt=nowIso(); setTimeout(()=>{ it.status="drafted"; demo.reviews[it.id]={draft:{body:"(데모) "+(n.oneLine||"")+"\n\n실제로는 메모와 사진을 바탕으로 400~650자 완성본이 여기에 와요.",chars:60,rating:n.rating,photoPlan:it.photos.map((p,i)=>({file:p.file,order:i+1,caption:p.tag||"사진"})),score:{total:84,parts:{}},questions:[],warnings:[]},photoCheck:{verdict:"ok",summary:"데모",photos:it.photos.map(p=>({file:p.file,verdict:"match",flags:[],note:"데모"}))},model:"claude-opus-5-5",draftedAt:nowIso()}; it.updatedAt=nowIso(); },4000); } else if(p.status) it.status=p.status; it.updatedAt=nowIso(); return ok({item:it,woke:true}); }
+  if(parts[0]==="items"&&parts.length===3&&parts[2]==="photos"&&m==="POST"){ const it=demo.items[parts[1]]; if(!it) return nf(); const n=it.photos.length+1; const file="photos/"+it.id+"/"+String(n).padStart(2,"0")+".jpg"; demo.photos[file]=opts.body; it.photos=[...it.photos,{file,tag:decodeURIComponent(u.searchParams.get("tag")||"")}]; return ok({item:it,file}); }
+  if(parts[0]==="items"&&parts.length===4&&m==="DELETE"){ const it=demo.items[parts[1]]; if(!it) return nf(); const file="photos/"+it.id+"/"+parts[3]; it.photos=it.photos.filter(p=>p.file!==file); return ok({item:it}); }
+  if(parts[0]==="photo"){ const b=demo.photos[u.searchParams.get("path")]; return b? ok({ok:true,blob:()=>Promise.resolve(b)}) : nf(); }
+  if(parts[0]==="reviews"){ const rv=demo.reviews[parts[1]]; return rv? ok({review:rv}) : nf(); }
+  if(parts[0]==="rules"&&m==="GET") return ok({text:demo.rules});
+  if(parts[0]==="rules"&&m==="PUT"){ demo.rules=JSON.parse(opts.body).text; return ok({sha:"x"}); }
+  return nf();
 }
 function seedDemo(){
-  const put=(p,obj)=>{ demoStore.files[p]={b64:b64encodeUtf8(JSON.stringify(obj)),sha:Math.random().toString(36).slice(2,10)}; };
-  put("config/app.json",{wakePr:1,name:"리뷰 공방 (데모)"});
-  put("config/engine.json",{active:true});
-  demoStore.files["config/style_guide.md"]={b64:b64encodeUtf8("# 작성 규칙 (데모)\n\n- 데모 모드라 규칙 전문은 생략합니다."),sha:"g1"};
-  const a=newId(), b=newId();
-  put("items/"+a+".json",{id:a,productName:"락앤락 비스프리 모듈러 밀폐용기 1.2L 4개",option:"투명",qty:1,orderDate:kst(),category:"생활주방",status:"drafted",photos:[],notes:{rating:5,oneLine:"뚜껑이 한 손으로 열려요",pros:["물때가 안 생김"],cons:["전원선 없음(해당 없음)"],period:"2주",usage:"반찬 보관",forWhom:"자취생"},createdAt:nowIso(),updatedAt:nowIso(),draftedAt:nowIso(),score:86,model:"claude-opus-5-5"});
-  put("reviews/"+a+".json",{draft:{body:"2주 동안 반찬 보관용으로 썼는데 뚜껑이 한 손으로 열리는 게 제일 편했어요.\n\n(데모 본문입니다. 실제로는 메모와 사진을 바탕으로 400~650자 완성본이 들어옵니다.)",chars:120,rating:5,photoPlan:[],score:{total:86,parts:{}},questions:[],warnings:[]},photoCheck:{verdict:"ok",summary:"사진 없음(데모)",photos:[]},model:"claude-opus-5-5",draftedAt:nowIso()});
-  put("items/"+b+".json",{id:b,productName:"에어팟 프로 3 실리콘 케이스",option:"블랙",qty:1,orderDate:kst(),category:"가전디지털",status:"collected",photos:[],notes:{},createdAt:nowIso(),updatedAt:nowIso()});
+  const now=nowIso(); const a="it_demo_a1", b="it_demo_b2";
+  demo.items[a]={id:a,account:"wife",productName:"락앤락 비스프리 모듈러 밀폐용기 1.2L 4개",option:"투명",qty:1,orderDate:kst(),category:"생활주방",status:"drafted",photos:[],notes:{rating:5,oneLine:"뚜껑이 한 손으로 열려요",pros:["물때가 안 생김"],cons:["없음"],period:"2주",usage:"반찬 보관",forWhom:"자취생"},createdAt:now,updatedAt:now};
+  demo.reviews[a]={draft:{body:"2주 동안 반찬 보관용으로 썼는데 뚜껑이 한 손으로 열리는 게 제일 편했어요.\n\n(데모 본문입니다. 실제로는 메모와 사진을 바탕으로 400~650자 완성본이 들어옵니다.)",chars:120,rating:5,photoPlan:[],score:{total:86,parts:{}},questions:[],warnings:[]},photoCheck:{verdict:"ok",summary:"사진 없음(데모)",photos:[]},model:"claude-opus-5-5",draftedAt:now};
+  demo.items[b]={id:b,account:"wife",productName:"에어팟 프로 3 실리콘 케이스",option:"블랙",qty:1,orderDate:kst(),category:"가전디지털",status:"collected",photos:[],notes:{},createdAt:now,updatedAt:now};
 }
 
-// ---------- data ----------
+// ---------- 데이터 ----------
 async function loadAll(silent){
   if(!S.cfg&&!S.demo) return;
   if(!silent){ S.loading=true; render(); }
   try{
-    const [app,files]=await Promise.all([getJson("config/app.json"), listDir("items")]);
-    S.app=app?app.data:null;
-    const want=files.filter(f=>f.name.endsWith(".json"));
-    const changed=want.filter(f=>S.shas[f.path]!==f.sha);
-    const results=await Promise.all(changed.map(async f=>{ const j=await getJson(f.path); return j? {f,j}:null; }));
-    const byId=Object.fromEntries(S.items.map(i=>[i.id,i]));
-    for(const r of results){ if(!r) continue; const it=r.j.data; it._sha=r.j.sha; it._path=r.f.path; byId[it.id]=it; S.shas[r.f.path]=r.f.sha; }
-    const present=new Set(want.map(f=>f.path));
-    S.items=Object.values(byId).filter(i=>present.has(i._path)).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)));
-    for(const it of S.items){ if(["drafted","mismatch","posted"].includes(it.status)&&(!S.reviews[it.id]||S.reviews[it.id]._at!==it.updatedAt)){ const rv=await getJson("reviews/"+it.id+".json"); if(rv){ rv.data._at=it.updatedAt; S.reviews[it.id]=rv.data; } } }
+    const [cfg,list]=await Promise.all([api("/api/config"), api("/api/items")]);
+    S.app=cfg; const items=(list&&list.items)||[];
+    const prev=Object.fromEntries(S.items.map(i=>[i.id,i]));
+    S.items=items.sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)));
+    for(const it of S.items){ const p=prev[it.id]; if(["drafted","mismatch","posted"].includes(it.status)&&(!S.reviews[it.id]||(p&&p.updatedAt!==it.updatedAt))){ try{ const r=await api("/api/reviews/"+encodeURIComponent(it.id)); if(r&&r.review) S.reviews[it.id]=r.review; }catch(e){} } }
     S.err=""; S.lastSync=nowIso();
-  }catch(e){
-    S.err = e.code==="auth"? "토큰이 맞지 않거나 만료됐어요. 남편에게 새 링크를 받아 다시 열어 주세요." : e.code==="forbidden"? "저장소 권한이 없어요(토큰 권한: Contents·Issues·Pull requests 읽기/쓰기)." : e.code==="notfound"? "저장소를 찾을 수 없어요. 링크의 저장소 이름을 확인해 주세요." : "불러오지 못했어요. 네트워크를 확인해 주세요.";
-  }
+    if(S.openId){ if(S.items.find(i=>i.id===S.openId)){ S.sel=S.openId; S.view="detail"; } S.openId=null; }
+  }catch(e){ S.err=errMsg(e,"불러오지 못했어요. 네트워크를 확인해 주세요."); }
   S.loading=false; render(); schedulePoll();
 }
-function schedulePoll(){ clearTimeout(S.pollT); const hot=S.items.some(i=>i.status==="ready"||i.status==="drafting"); S.pollT=setTimeout(()=>loadAll(true), hot? 20000 : 90000); }
-async function saveItem(it,patch,msg){
-  const next=Object.assign({},it,patch,{updatedAt:nowIso()}); const sha=it._sha; const path="items/"+it.id+".json";
-  const clean=Object.fromEntries(Object.entries(next).filter(([k])=>!k.startsWith("_")));
-  try{ const ns=await putJson(path,clean,msg||("app: "+it.id),sha); Object.assign(it,clean,{_sha:ns,_path:path}); S.shas[path]=ns; return true; }
-  catch(e){ if(e.code==="conflict"){ const cur=await getJson(path); if(cur){ const merged=Object.assign({},cur.data,patch,{updatedAt:nowIso()}); try{ const ns=await putJson(path,merged,msg||("app: "+it.id),cur.sha); Object.assign(it,merged,{_sha:ns,_path:path}); S.shas[path]=ns; return true; }catch(e2){} } }
-    toast(e.code==="auth"?"토큰이 맞지 않아요":"저장하지 못했어요. 다시 시도해 주세요."); return false; }
+function schedulePoll(){ clearTimeout(S.pollT); const hot=S.items.some(i=>i.status==="ready"||i.status==="drafting"); S.pollT=setTimeout(()=>loadAll(true), hot? 15000 : 90000); }
+function replaceItem(it){ const i=S.items.findIndex(x=>x.id===it.id); if(i>=0) S.items[i]=it; else S.items.unshift(it); return it; }
+async function patchItem(it,patch){
+  try{ const r=await api("/api/items/"+encodeURIComponent(it.id),{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify(patch)}); replaceItem(r.item); return r; }
+  catch(e){ toast(errMsg(e,"저장하지 못했어요. 다시 시도해 주세요.")); return null; }
 }
 async function createItem(o){
-  const id=newId(); const now=nowIso();
-  const it=Object.assign({id,source:"coupang",status:"collected",photos:[],notes:{},createdAt:now,updatedAt:now,qty:1,option:"",deliveredAt:"",productUrl:"",category:"",isTrial:false,trialInvitedAt:"",price:null},o);
-  const path="items/"+id+".json";
-  try{ const sha=await putJson(path,it,"app: 접수 "+it.productName); it._sha=sha; it._path=path; S.shas[path]=sha; S.items.unshift(it); return it; }
-  catch(e){ toast(e.code==="auth"?"토큰이 맞지 않아요":"접수하지 못했어요. 다시 시도해 주세요."); return null; }
+  try{ const r=await api("/api/items",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(o)}); return replaceItem(r.item); }
+  catch(e){ toast(errMsg(e,"접수하지 못했어요. 다시 시도해 주세요.")); return null; }
 }
 
-// ---------- photos ----------
+// ---------- 사진 ----------
 function loadImage(url){ return new Promise((res,rej)=>{ const im=new Image(); im.onload=()=>res(im); im.onerror=()=>rej(new Error("decode")); im.src=url; }); }
 async function shrink(file){ const url=URL.createObjectURL(file); try{ const img=await loadImage(url); const max=1600, w=img.naturalWidth, hh=img.naturalHeight, s=Math.min(1,max/Math.max(w,hh)); const cw=Math.max(1,Math.round(w*s)), ch=Math.max(1,Math.round(hh*s)); const c=document.createElement("canvas"); c.width=cw; c.height=ch; c.getContext("2d").drawImage(img,0,0,cw,ch); const blob=await new Promise(r=>c.toBlob(r,"image/jpeg",0.85)); if(!blob) throw new Error("encode"); return blob; } finally{ URL.revokeObjectURL(url); } }
 async function uploadPhotos(it,files){
-  if(!files||!files.length) return; S.busy="사진 올리는 중 0/"+files.length; render();
-  const added=[]; const errs=[]; let n=(it.photos||[]).length;
-  for(const f of Array.from(files).slice(0,10)){
-    try{ const blob=await shrink(f); const buf=new Uint8Array(await blob.arrayBuffer()); n++; const p="photos/"+it.id+"/"+String(n).padStart(2,"0")+".jpg"; if(S.demo) demoStore.pendingBlob=blob; await putFile(p,b64bytes(buf),"app: 사진 "+it.id); S.photoUrls[p]=URL.createObjectURL(blob); added.push({file:p,tag:""}); S.busy="사진 올리는 중 "+added.length+"/"+files.length; render(); }
-    catch(e){ errs.push((f.name||"사진")+": "+(e.code==="auth"?"토큰 오류":e.code? e.code:"읽을 수 없는 형식")); }
+  if(!files||!files.length) return; const list=Array.from(files).slice(0,10); S.busy="사진 올리는 중 0/"+list.length; render();
+  let done=0; const errs=[];
+  for(const f of list){
+    try{ const blob=await shrink(f); const r=await api("/api/items/"+encodeURIComponent(it.id)+"/photos",{method:"POST",headers:{"Content-Type":"image/jpeg"},body:blob}); replaceItem(r.item); S.photoUrls[r.file]=URL.createObjectURL(blob); done++; S.busy="사진 올리는 중 "+done+"/"+list.length; render(); }
+    catch(e){ errs.push((f.name||"사진")+": "+(e&&e.code==="auth"?"열쇠 오류":(e&&e.message)||"읽을 수 없는 형식")); }
   }
-  S.busy="";
-  if(added.length){ await saveItem(it,{photos:[...(it.photos||[]),...added]},"app: 사진 "+added.length+"장 "+it.id); toast(added.length+"장 올렸어요"); }
-  if(errs.length) toast("올리지 못한 사진: "+errs.join(", "));
-  render();
+  S.busy=""; if(done) toast(done+"장 올렸어요"); if(errs.length) toast("올리지 못한 사진: "+errs.join(", ")); render();
 }
-async function removePhoto(it,i){ const p=[...(it.photos||[])]; const [gone]=p.splice(i,1); if(await saveItem(it,{photos:p},"app: 사진 삭제 "+it.id)){ try{ const f=await gh(repoPath(gone.file)); await deleteFile(gone.file,f.sha,"app: 사진 삭제"); }catch(e){} render(); } }
-async function tagPhoto(it,i,tag){ const p=(it.photos||[]).map((x,k)=>k===i?Object.assign({},x,{tag}):x); await saveItem(it,{photos:p},"app: 사진 태그 "+it.id); }
+async function removePhoto(it,i){ const p=(it.photos||[])[i]; if(!p) return; try{ const r=await api("/api/items/"+encodeURIComponent(it.id)+"/photos/"+encodeURIComponent(p.file.split("/").pop()),{method:"DELETE"}); replaceItem(r.item); render(); }catch(e){ toast(errMsg(e,"삭제하지 못했어요")); } }
+async function tagPhoto(it,i,tag){ const tags=(it.photos||[]).map((x,k)=>k===i?tag:(x.tag||"")); await patchItem(it,{photoTags:tags}); }
 
-// ---------- views ----------
+// ---------- 화면 ----------
 function render(){
   const app=$("#app");
   if(!S.cfg&&!S.demo){ app.replaceChildren(setupView()); return; }
@@ -286,21 +244,22 @@ function render(){
   else app.replaceChildren(header(), listView(), h("button",{class:"fab",onclick:()=>{S.view="new"; render(); window.scrollTo(0,0);}},"+ 새 상품"));
 }
 function header(){
+  const sub = S.demo? "데모 모드 · 저장되지 않아요" : (S.loading? "불러오는 중…" : [S.app&&ACCT[S.app.account], S.lastSync? "동기화 "+fmtDT(S.lastSync):null].filter(Boolean).join(" · "));
   const left = S.view==="list"
-    ? h("div",{class:"brand"}, h("div",{class:"logo","aria-hidden":"true"},"공"), h("div",{}, h("h1",{text:(S.app&&S.app.name)||"리뷰 공방"}), h("div",{class:"sub",text: S.demo? "데모 모드 · 저장되지 않아요" : (S.loading? "불러오는 중…" : S.lastSync? "동기화 "+fmtDT(S.lastSync) : "")})))
+    ? h("div",{class:"brand"}, h("div",{class:"logo","aria-hidden":"true"},"공"), h("div",{}, h("h1",{text:(S.app&&S.app.name)||"리뷰 공방"}), h("div",{class:"sub",text:sub})))
     : h("button",{class:"btn sm",onclick:()=>{S.view="list"; S.sel=null; render(); window.scrollTo(0,0);}},"← 목록");
   return h("div",{class:"bar"}, left,
     h("div",{class:"row",style:"flex-wrap:nowrap"},
-      h("button",{class:"btn sm",onclick:()=>loadAll(false),title:"새로고침","aria-label":"새로고침"}, S.loading? h("span",{class:"spin"}):"새로고침"),
+      h("button",{class:"btn sm",onclick:()=>loadAll(false),"aria-label":"새로고침"}, S.loading? h("span",{class:"spin"}):"새로고침"),
       S.view!=="settings"? h("button",{class:"btn sm ghost",onclick:()=>{S.view="settings"; render();}},"설정") : null));
 }
 function setupView(){
   return h("div",{class:"stack"},
     h("div",{class:"bar"}, h("div",{class:"brand"}, h("div",{class:"logo"},"공"), h("div",{}, h("h1",{text:"리뷰 공방"}), h("div",{class:"sub",text:"쿠팡 사진 리뷰 작업실"})))),
     h("div",{class:"card"}, h("h2",{text:"남편이 보낸 링크로 열어 주세요"}),
-      h("p",{text:"이 앱은 링크 뒤에 붙은 열쇠로 남편의 비공개 저장소에 연결돼요. 열쇠가 없는 상태라 아직 아무것도 불러올 수 없어요."}),
-      h("p",{class:"hint",text:"링크 모양: …/review/#k=열쇠&r=계정/저장소 — 한 번 열면 이 폰에 저장되고 주소창에서는 지워져요."}),
-      h("div",{class:"row"}, h("button",{class:"btn",onclick:()=>{ S.demo=true; seedDemo(); S.cfg={token:"demo",owner:"demo",repo:"demo",branch:"main"}; loadAll(false); }},"화면만 둘러보기 (데모)"))));
+      h("p",{text:"이 앱은 링크에 든 열쇠로 남편의 리뷰 공방 서버에 연결돼요. 열쇠가 없는 상태라 아직 아무것도 불러올 수 없어요."}),
+      h("p",{class:"hint",text:"링크 모양: …/review/#s=서버주소&k=열쇠 — 한 번 열면 이 폰에 저장되고 주소창에서는 지워져요. 홈 화면에 추가하면 앱처럼 쓸 수 있어요."}),
+      h("div",{class:"row"}, h("button",{class:"btn",onclick:()=>{ S.demo=true; seedDemo(); S.cfg={server:"demo",key:"demo"}; loadAll(false); }},"화면만 둘러보기 (데모)"))));
 }
 function listView(){
   const filters=[["active","진행 중"],["drafted","리뷰 완성"],["collected","사진·메모"],["mismatch","사진 확인"],["ready","작성 대기"],["posted","게시됨"],["all","전체"]];
@@ -313,7 +272,7 @@ function listView(){
   if(trials.length&&trials[0].left<=5) kids.push(h("div",{class:"banner "+(trials[0].left<=2?"crit":"")}, h("strong",{text:"체험단 리뷰 마감 "+(trials[0].left>=0?"D-"+trials[0].left:"지남")+" · "+(trials[0].t.productName||"")})));
   kids.push(h("div",{class:"chips"}, ...filters.map(([k,l])=>h("button",{class:"chip","aria-pressed":String(S.filter===k),onclick:()=>{S.filter=k; render();}},l))));
   if(rows.length) kids.push(h("div",{class:"stack"}, ...rows.map(itemCard)));
-  else kids.push(h("div",{class:"card"}, h("div",{class:"empty"}, h("strong",{text: S.loading? "불러오는 중…" : S.items.length? "이 조건에 맞는 상품이 없어요" : "아직 접수된 상품이 없어요"}), h("span",{text:S.loading?"":"오른쪽 아래 '+ 새 상품'을 눌러 쿠팡 주문목록의 상품명을 적어 주세요."}))));
+  else kids.push(h("div",{class:"card"}, h("div",{class:"empty"}, h("strong",{text: S.loading? "불러오는 중…" : S.items.length? "이 조건에 맞는 상품이 없어요" : "아직 접수된 상품이 없어요"}), h("span",{text:S.loading?"":"오른쪽 아래 '+ 새 상품'을 눌러 쿠팡 주문목록의 상품명을 적어 주세요. 피클에게 \"리뷰 공방에 ○○ 접수해 줘\"라고 해도 돼요."}))));
   if(need) kids.push(h("p",{class:"hint",text:"사진·메모가 필요한 상품 "+need+"개. 사진 4장과 한 줄 메모면 충분해요."}));
   return h("div",{class:"stack"},...kids);
 }
@@ -339,16 +298,17 @@ function newView(){
       h("div",{class:"field"},h("label",{for:"n-deliv",text:"배송완료일"}),h("input",{type:"date",id:"n-deliv"})),
       h("div",{class:"field wide"},h("label",{for:"n-cat",text:"카테고리"}),h("select",{id:"n-cat"},h("option",{value:"",text:"선택"}),...CATS.map(c=>h("option",{value:c,text:c})))),
       h("div",{class:"field wide"},h("label",{for:"n-trial",text:"체험단 초대일 (체험단 상품만)"}),h("input",{type:"date",id:"n-trial"}))),
-    h("button",{class:"btn primary block",onclick:async()=>{ const name=g("n-name"); if(!name){ toast("상품명을 적어 주세요"); return; } if(S.items.find(i=>i.productName===name&&i.orderDate===g("n-date"))){ toast("같은 날 같은 상품이 이미 있어요"); return; } const t=g("n-trial"); const it=await createItem({productName:name,option:g("n-opt"),qty:Number(g("n-qty"))||1,orderDate:g("n-date"),deliveredAt:g("n-deliv"),category:g("n-cat"),isTrial:!!t,trialInvitedAt:t}); if(it){ toast("접수했어요. 사진과 메모를 채워 주세요."); S.sel=it.id; S.view="detail"; render(); window.scrollTo(0,0); } }},"접수하고 사진 올리기"));
+    h("button",{class:"btn primary block",onclick:async()=>{ const name=g("n-name"); if(!name){ toast("상품명을 적어 주세요"); return; } if(S.items.find(i=>i.productName===name&&i.orderDate===g("n-date"))){ toast("같은 날 같은 상품이 이미 있어요"); return; } const it=await createItem({productName:name,option:g("n-opt"),qty:Number(g("n-qty"))||1,orderDate:g("n-date"),deliveredAt:g("n-deliv"),category:g("n-cat"),trialInvitedAt:g("n-trial")}); if(it){ toast("접수했어요. 사진과 메모를 채워 주세요."); S.sel=it.id; S.view="detail"; render(); window.scrollTo(0,0); } }},"접수하고 사진 올리기"));
 }
 function detailView(){
   const it=S.items.find(i=>i.id===S.sel); if(!it){ S.view="list"; return listView(); }
   const rv=S.reviews[it.id]; const ro=!isActive(it);
   const idx=["collected","ready","drafted","posted"].indexOf(it.status==="drafting"?"ready":it.status==="mismatch"?"collected":it.status);
-  const steps=[["접수"],["사진·메모 완료"],["리뷰 완성"],["게시"]].map(([l],i)=>h("span",{class:"step"+(i<idx?" done":i===idx?" now":""),text:l}));
+  const steps=["접수","사진·메모 완료","리뷰 완성","게시"].map((l,i)=>h("span",{class:"step"+(i<idx?" done":i===idx?" now":""),text:l}));
   const kids=[h("div",{class:"card"}, h("div",{class:"row between"}, h("h2",{text:it.productName||"(상품명 없음)"}), h("span",{class:"pill "+(it.status||""),text:STATUS[it.status]||it.status})), h("div",{class:"steps"},...steps),
     h("div",{class:"hint",text:[it.option?"옵션 "+it.option:null, it.qty?it.qty+"개":null, it.orderDate?"주문 "+fmtDate(it.orderDate):null, it.category||null, it.isTrial&&it.trialInvitedAt? "체험단 리뷰 마감 "+addDays(it.trialInvitedAt,14):null].filter(Boolean).join(" · ")}))];
   if(it.status==="ready"||it.status==="drafting") kids.push(h("div",{class:"banner info"}, h("div",{class:"row"}, h("span",{class:"spin"}), h("strong",{text: it.status==="drafting"? "리뷰를 쓰는 중이에요" : "작성 대기 중이에요"})), h("span",{class:"hint",text:"보통 1~5분, 늦어도 몇 시간 안에 완성돼요. 이 화면은 자동으로 새로고침돼요. 앱을 닫아도 괜찮아요."})));
+  if(it.lastError&&it.status==="ready") kids.push(h("div",{class:"banner"},h("span",{text:"지난 시도에서 문제가 있었어요: "+it.lastError+" (다시 시도 중)"})));
   if(rv&&rv.draft&&it.status!=="mismatch") kids.push(reviewCard(it,rv));
   kids.push(photosCard(it,rv,ro));
   kids.push(notesCard(it,ro));
@@ -370,8 +330,8 @@ function reviewCard(it,rv){
     (d.questions||[]).length? h("div",{class:"banner"}, h("strong",{text:"메모를 조금 더 채우면 더 좋아져요"}), h("ul",{class:"clean"},...d.questions.map(q=>h("li",{text:q})))) : null,
     (d.warnings||[]).length? h("p",{class:"hint",text:"참고: "+d.warnings.join(" · ")}) : null,
     h("div",{class:"row"},
-      it.status!=="posted"? h("button",{class:"btn primary",onclick:async()=>{ if(await saveItem(it,{status:"posted",postedAt:nowIso()},"app: 게시 완료 "+it.id)){ toast("게시 완료로 표시했어요"); render(); } }},"쿠팡에 올렸어요") : h("span",{class:"pill posted",text:"게시됨 "+fmtDT(it.postedAt)}),
-      it.status==="posted"? h("div",{class:"row"}, h("label",{class:"hint",for:"f-help",text:"도움돼요 수"}), h("input",{type:"number",id:"f-help",min:"0",style:"width:90px",value:it.helpfulCount??"",onchange:e=>saveItem(it,{helpfulCount:Number(e.target.value)||0},"app: 도움돼요 "+it.id)})) : null));
+      it.status!=="posted"? h("button",{class:"btn primary",onclick:async()=>{ if(await patchItem(it,{status:"posted"})){ toast("게시 완료로 표시했어요"); render(); } }},"쿠팡에 올렸어요") : h("span",{class:"pill posted",text:"게시됨 "+fmtDT(it.postedAt)}),
+      it.status==="posted"? h("div",{class:"row"}, h("label",{class:"hint",for:"f-help",text:"도움돼요 수"}), h("input",{type:"number",id:"f-help",min:"0",style:"width:90px",value:it.helpfulCount??"",onchange:e=>patchItem(it,{helpfulCount:Number(e.target.value)||0})})) : null));
 }
 function modelLabel(m){ m=String(m||""); if(/opus-5-5/.test(m)) return "Opus 5.5"; if(/opus/.test(m)) return "Opus"; if(/sonnet/.test(m)) return "Sonnet"; if(/fable/.test(m)) return "Fable"; return m; }
 async function copyText(txt,el){ try{ await navigator.clipboard.writeText(txt); toast("복사했어요. 쿠팡 리뷰 창에 붙여 넣으세요."); }catch(e){ if(el){ el.focus(); el.select&&el.select(); } toast("길게 눌러 전체 선택 후 복사해 주세요."); } }
@@ -412,11 +372,12 @@ function notesCard(it,ro){
   btn=h("button",{class:"btn primary block",disabled:ro,onclick:async()=>{
     const nn=read(); if(!checks(nn).every(x=>x.ok)){ toast("별점·한 줄·좋은 점·아쉬운 점·기간·사진 1장이 있어야 요청할 수 있어요"); return; }
     btn.disabled=true; btn.textContent="요청하는 중…";
-    const ok=await saveItem(it,{notes:nn,status:"ready",requestedAt:nowIso(),lastError:""},"app: 리뷰 요청 "+it.id);
-    if(ok){ const woke=await wake("ready "+it.id+" "+(it.productName||"")); toast(woke? "요청했어요. 보통 1~5분 안에 리뷰가 와요." : "요청했어요. 엔진이 다음 실행에 리뷰를 써요."); render(); window.scrollTo(0,0); schedulePoll(); }
+    const saved=await patchItem(it,{notes:nn});
+    const r = saved? await patchItem(saved.item,{status:"ready"}) : null;
+    if(r){ toast(r.woke? "요청했어요. 보통 1~5분 안에 리뷰가 와요." : "요청했어요. 엔진이 다음 실행에 리뷰를 써요."); render(); window.scrollTo(0,0); schedulePoll(); }
     else { btn.disabled=false; btn.textContent="리뷰 요청"; }
   }}, ["drafted","ready","drafting","mismatch"].includes(it.status)? "다시 리뷰 요청" : "리뷰 요청");
-  const save=h("button",{class:"btn",disabled:ro,onclick:async()=>{ if(await saveItem(it,{notes:read()},"app: 메모 "+it.id)) toast("메모를 저장했어요"); }},"메모만 저장");
+  const save=h("button",{class:"btn",disabled:ro,onclick:async()=>{ if(await patchItem(it,{notes:read()})) toast("메모를 저장했어요"); }},"메모만 저장");
   setTimeout(refresh,0);
   return h("div",{class:"card"}, h("h2",{text:"경험 메모"}), h("p",{class:"hint",text:"리뷰는 여기 적은 것만 경험으로 써요. 짧아도 좋으니 사실만. 요청하면 사진이 그 상품이 맞는지 먼저 확인하고 리뷰를 써요."}), form, ready, h("div",{class:"sticky"}, save, btn));
 }
@@ -430,23 +391,22 @@ function orderCard(it){
       h("div",{class:"field"},h("label",{for:"o-date",text:"주문일"}),h("input",{type:"date",id:"o-date",value:it.orderDate||""})),
       h("div",{class:"field"},h("label",{for:"o-trial",text:"체험단 초대일"}),h("input",{type:"date",id:"o-trial",value:it.trialInvitedAt||""}))),
     h("div",{class:"row",style:"margin-top:10px"},
-      h("button",{class:"btn",onclick:async()=>{ const t=g("o-trial"); if(await saveItem(it,{productName:g("o-name"),option:g("o-opt"),category:g("o-cat"),orderDate:g("o-date"),isTrial:!!t,trialInvitedAt:t},"app: 주문정보 "+it.id)){ toast("저장했어요"); render(); } }},"저장"),
-      isActive(it)? h("button",{class:"btn",onclick:async()=>{ if(await saveItem(it,{status:"skipped"},"app: 건너뜀 "+it.id)){ toast("건너뜀으로 표시"); S.view="list"; render(); } }},"이 상품은 건너뛰기") : h("button",{class:"btn",onclick:async()=>{ if(await saveItem(it,{status:"collected"},"app: 다시 진행 "+it.id)){ render(); } }},"다시 진행")),
+      h("button",{class:"btn",onclick:async()=>{ if(await patchItem(it,{productName:g("o-name"),option:g("o-opt"),category:g("o-cat"),orderDate:g("o-date"),trialInvitedAt:g("o-trial")})){ toast("저장했어요"); render(); } }},"저장"),
+      isActive(it)? h("button",{class:"btn",onclick:async()=>{ if(await patchItem(it,{status:"skipped"})){ toast("건너뜀으로 표시"); S.view="list"; render(); } }},"이 상품은 건너뛰기") : h("button",{class:"btn",onclick:async()=>{ if(await patchItem(it,{status:"collected"})) render(); }},"다시 진행")),
     h("p",{class:"hint mono",text:it.id}));
 }
 function settingsView(){
-  const guide=S.guide;
-  const box=h("div",{class:"stack"});
+  const guide=S.guide; const box=h("div",{class:"stack"});
   box.append(h("div",{class:"card"}, h("h2",{text:"연결"}),
-    h("dl",{class:"kv"}, h("dt",{text:"저장소"}), h("dd",{class:"mono",text:S.demo? "데모" : S.cfg.owner+"/"+S.cfg.repo}), h("dt",{text:"열쇠"}), h("dd",{class:"mono",text:S.demo? "—" : S.cfg.token.slice(0,8)+"…"}), h("dt",{text:"알림 PR"}), h("dd",{text:(S.app&&S.app.wakePr)? "#"+S.app.wakePr : "없음 (엔진 정기 실행만)"})),
-    h("p",{class:"hint",text:"이 폰에만 저장돼요. 새 링크를 열면 바뀌고, 아래 버튼으로 지울 수 있어요."}),
-    h("div",{class:"row"}, h("button",{class:"btn danger sm",onclick:()=>{ try{localStorage.removeItem("rl.cfg");}catch(e){} S.cfg=null; S.demo=false; S.items=[]; S.view="list"; render(); }},"연결 끊기"))));
+    h("dl",{class:"kv"}, h("dt",{text:"서버"}), h("dd",{class:"mono",text:S.demo? "데모" : S.cfg.server}), h("dt",{text:"열쇠"}), h("dd",{class:"mono",text:S.demo? "—" : S.cfg.key.slice(0,6)+"…"}), h("dt",{text:"계정"}), h("dd",{text:(S.app&&ACCT[S.app.account])||"—"}), h("dt",{text:"즉시 알림"}), h("dd",{text:(S.app&&S.app.wakePr)? "켜짐 (요청 즉시 엔진 호출)" : "꺼짐 (예약 엔진만)"})),
+    h("p",{class:"hint",text:"열쇠는 이 폰에만 저장돼요. 새 링크를 열면 바뀌고, 아래 버튼으로 지울 수 있어요."}),
+    h("div",{class:"row"}, h("button",{class:"btn danger sm",onclick:()=>{ try{localStorage.removeItem("rl.cfg2");}catch(e){} S.cfg=null; S.demo=false; S.items=[]; S.view="list"; render(); }},"연결 끊기"))));
   const gcard=h("div",{class:"card"}, h("h2",{text:"리뷰 작성 규칙"}), h("p",{class:"hint",text:"엔진이 리뷰를 쓸 때 그대로 따르는 지시문이에요. 말투나 길이를 바꾸고 싶을 때만 고치세요."}));
-  if(!guide){ gcard.append(h("button",{class:"btn sm",onclick:async()=>{ const t=await getText("config/style_guide.md"); S.guide=t||{text:"",sha:null}; render(); }},"규칙 불러오기")); }
-  else { const ta=h("textarea",{rows:16},guide.text); gcard.append(h("pre",{class:"doc",text:guide.text}), h("details",{}, h("summary",{text:"수정"}), ta, h("div",{class:"row",style:"margin-top:8px"}, h("button",{class:"btn primary sm",onclick:async()=>{ try{ const sha=await putFile("config/style_guide.md",b64encodeUtf8(ta.value),"app: 작성 규칙 수정",guide.sha); S.guide={text:ta.value,sha}; toast("저장했어요. 다음 리뷰부터 반영돼요."); render(); }catch(e){ toast("저장하지 못했어요"); } }},"저장")))); }
+  if(!guide){ gcard.append(h("button",{class:"btn sm",onclick:async()=>{ try{ const r=await api("/api/rules"); S.guide={text:r.text||""}; }catch(e){ S.guide={text:""}; toast(errMsg(e,"규칙을 불러오지 못했어요")); } render(); }},"규칙 불러오기")); }
+  else { const ta=h("textarea",{rows:16},guide.text); gcard.append(h("pre",{class:"doc",text:guide.text||"(비어 있음)"}), h("details",{}, h("summary",{text:"수정"}), ta, h("div",{class:"row",style:"margin-top:8px"}, h("button",{class:"btn primary sm",onclick:async()=>{ try{ await api("/api/rules",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({text:ta.value})}); S.guide={text:ta.value}; toast("저장했어요. 다음 리뷰부터 반영돼요."); render(); }catch(e){ toast(errMsg(e,"저장하지 못했어요")); } }},"저장")))); }
   box.append(gcard);
   box.append(h("div",{class:"card"}, h("h2",{text:"쓰는 법"}), h("ol",{class:"clean"},
-    h("li",{text:"'+ 새 상품'에 쿠팡 주문목록의 상품명을 붙여 넣고 접수."}),
+    h("li",{text:"'+ 새 상품'에 쿠팡 주문목록의 상품명을 붙여 넣고 접수. (피클에게 \"리뷰 공방에 ○○ 접수해 줘\"라고 해도 같은 곳에 들어가요.)"}),
     h("li",{text:"사진 4~7장 올리고(전체·크기 비교·라벨·사용 장면), 별점과 한 줄 메모·좋은 점·아쉬운 점·기간을 적은 뒤 '리뷰 요청'."}),
     h("li",{text:"보통 1~5분 뒤 '리뷰 완성'으로 바뀌면 열어서 '본문 복사' → 쿠팡 앱 리뷰 작성에 붙여넣기 → 사진은 안내 순서대로 → 등록."}),
     h("li",{text:"등록했으면 '쿠팡에 올렸어요'를 눌러 기록."}),
@@ -454,12 +414,12 @@ function settingsView(){
   return box;
 }
 
-// ---------- boot ----------
+// ---------- 시작 ----------
 readHash(); S.cfg=loadCfg();
-if(S.demo){ seedDemo(); S.cfg={token:"demo",owner:"demo",repo:"demo",branch:"main"}; }
+if(S.demo){ seedDemo(); S.cfg={server:"demo",key:"demo"}; }
 render();
-if(S.cfg||S.demo) loadAll(false);
-document.addEventListener("visibilitychange",()=>{ if(!document.hidden&&(S.cfg||S.demo)) loadAll(true); });
+if(S.cfg) loadAll(false);
+document.addEventListener("visibilitychange",()=>{ if(!document.hidden&&S.cfg) loadAll(true); });
 })();
 </script>
 </body>

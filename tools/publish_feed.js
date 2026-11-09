@@ -2,7 +2,7 @@
 // GitHub mode (default): files are written to a public GitHub Pages repo through the gh CLI (Contents API; auth injected by the session proxy).
 //   node publish_feed.js --repo OWNER/REPO --token FEEDTOKEN --post OUT_DIR --meta meta.json [--postjson post.json] [--prune-days 3]
 // Local mode (no GitHub; for tests): node publish_feed.js --local FEED_DIR --token FEEDTOKEN --post OUT_DIR --meta meta.json
-// meta.json: {"id","date","theme","themeLabel","index","slot","title","keyword","aiImages","category","naverTopic","hashtags":[],"dashboardPostId"}
+// meta.json: {"id","date","theme","themeLabel","naverCategory","index","slot","title","keyword","aiImages","category","naverTopic","hashtags":[],"dashboardPostId"}
 // Layout in the repo:  robots.txt (Disallow all) · f/<token>/index.html (today list) · f/<token>/posts.json (registry) · f/<token>/<date>/<id>/index.html, img/*, post_plain.txt, post.json
 const fs = require('fs'); const path = require('path'); const { execFileSync } = require('child_process');
 const args = process.argv.slice(2); const opt = (k, d) => { const i = args.indexOf('--' + k); return i >= 0 ? args[i + 1] : d; };
@@ -10,6 +10,7 @@ const REPO = opt('repo'), LOCAL = opt('local'), TOKEN = opt('token'), POST = opt
 if ((!REPO && !LOCAL) || !TOKEN || !POST || !METAP) { console.error('usage: see header'); process.exit(2); }
 const meta = JSON.parse(fs.readFileSync(METAP, 'utf8'));
 const base = `f/${TOKEN}`; const postDir = `${base}/${meta.date}/${meta.id}`;
+const CAT = { money: '금융', digital: 'IT', travel: '여행', routine: '루틴' }; // 네이버 블로그 카테고리 이름(테마별 기본값)
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 // ---------- storage backends ----------
@@ -38,7 +39,7 @@ console.log('copied', files.length + imgCount, 'files to', postDir);
 // ---------- 2) registry ----------
 let reg = []; const rb = backend.read(`${base}/posts.json`); if (rb) { try { reg = JSON.parse(rb.toString('utf8')); } catch (e) { reg = []; } }
 reg = reg.filter(r => r.id !== meta.id);
-reg.push({ id: meta.id, date: meta.date, theme: meta.theme, themeLabel: meta.themeLabel, index: meta.index, slot: meta.slot, title: meta.title, keyword: meta.keyword, aiImages: !!meta.aiImages, category: meta.category, naverTopic: meta.naverTopic, hashtags: meta.hashtags || [], path: `${meta.date}/${meta.id}/`, dashboardPostId: meta.dashboardPostId || meta.id, addedAt: new Date().toISOString() });
+reg.push({ id: meta.id, date: meta.date, theme: meta.theme, naverCategory: meta.naverCategory || CAT[meta.theme] || '', themeLabel: meta.themeLabel, index: meta.index, slot: meta.slot, title: meta.title, keyword: meta.keyword, aiImages: !!meta.aiImages, category: meta.category, naverTopic: meta.naverTopic, hashtags: meta.hashtags || [], path: `${meta.date}/${meta.id}/`, dashboardPostId: meta.dashboardPostId || meta.id, addedAt: new Date().toISOString() });
 // prune old entries + files
 const cutoff = new Date(Date.now() - PRUNE * 86400000).toISOString().slice(0, 10);
 const old = reg.filter(r => r.date < cutoff); reg = reg.filter(r => r.date >= cutoff);
@@ -48,7 +49,7 @@ backend.write(`${base}/posts.json`, Buffer.from(JSON.stringify(reg, null, 1)), '
 
 // ---------- 3) static index (today first) ----------
 const days = [...new Set(reg.map(r => r.date))];
-const row = (r) => `<li class="p"><div class="m"><span class="t ${esc(r.theme)}">${esc(r.themeLabel || r.theme)}</span><b>${esc(r.slot || '')}</b>${r.aiImages ? '<span class="ai">AI 이미지 포함 · AI 활용 표시 켜기</span>' : ''}</div><a class="title" href="./${esc(r.path)}">${esc(r.title)}</a><div class="m">카테고리 ${esc(r.category || '')} · 주제 ${esc(r.naverTopic || '')} · 글 ID ${esc(r.id)}</div></li>`;
+const row = (r) => `<li class="p"><div class="m"><span class="t ${esc(r.theme)}">${esc(r.themeLabel || r.theme)}</span><span class="t" style="background:#1f6f5f;color:#fff">📁 ${esc(r.naverCategory || CAT[r.theme] || '')}</span><b>${esc(r.slot || '')}</b>${r.aiImages ? '<span class="ai">AI 이미지 포함 · AI 활용 표시 켜기</span>' : ''}</div><a class="title" href="./${esc(r.path)}">${esc(r.title)}</a><div class="m">네이버 카테고리 ${esc(r.naverCategory || CAT[r.theme] || '')} · 테마 ${esc(r.category || '')} · 주제 분류 ${esc(r.naverTopic || '')} · 글 ID ${esc(r.id)}</div></li>`;
 const html = `<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow,noarchive"><title>오늘의 글 피드</title>
 <style>body{font-family:system-ui,-apple-system,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;max-width:860px;margin:0 auto;padding:20px 16px;color:#172127;background:#f6f7f3;line-height:1.55}h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:26px 0 10px;color:#4a5a52}ul{list-style:none;padding:0;margin:0;display:grid;gap:10px}.p{background:#fff;border:1px solid #dfe4dd;border-radius:12px;padding:12px 14px}.m{font-size:13px;color:#60706a;display:flex;gap:10px;flex-wrap:wrap;align-items:center}.m b{color:#172127}.t{display:inline-block;padding:1px 9px;border-radius:999px;color:#fff;font-size:12px;font-weight:600}.t.money{background:#14694f}.t.digital{background:#2e3fa3}.t.routine{background:#d9622b}.t.travel{background:#0e7490}.title{display:block;font-size:17px;font-weight:700;margin:6px 0;color:#1f4068;text-decoration:none}.ai{background:#fff3cd;color:#7a5a00;padding:1px 8px;border-radius:999px;font-size:12px}.note{font-size:13px;color:#60706a}</style></head><body>
 <h1>오늘의 글 피드</h1><p class="note">발행 대행용 목록입니다. 각 글을 열어 '제목 복사 → 서식 복사 → 이미지 복사'로 네이버에 옮기고, 적힌 시각으로 예약 발행하세요. 갱신: ${esc(new Date().toISOString().slice(0, 16).replace('T', ' '))} UTC</p>

@@ -25,7 +25,8 @@
   ],
   "path": "2026-11-09/2026-11-09-money-1/",
   "dashboardPostId": "2026-11-09-money-1",
-  "addedAt": "2026-11-08T20:52:39.803Z"
+  "addedAt": "2026-11-08T20:52:39.803Z",
+  "naverCategory": "금융"
  },
  {
   "id": "2026-11-09-digital-1",
@@ -53,7 +54,8 @@
   ],
   "path": "2026-11-09/2026-11-09-digital-1/",
   "dashboardPostId": "2026-11-09-digital-1",
-  "addedAt": "2026-11-08T20:52:39.674Z"
+  "addedAt": "2026-11-08T20:52:39.674Z",
+  "naverCategory": "IT"
  },
  {
   "id": "2026-11-09-routine-1",
@@ -81,7 +83,8 @@
   ],
   "path": "2026-11-09/2026-11-09-routine-1/",
   "dashboardPostId": "2026-11-09-routine-1",
-  "addedAt": "2026-11-08T20:52:39.901Z"
+  "addedAt": "2026-11-08T20:52:39.901Z",
+  "naverCategory": "루틴"
  },
  {
   "id": "2026-11-09-travel-1",
@@ -109,7 +112,8 @@
   ],
   "path": "2026-11-09/2026-11-09-travel-1/",
   "dashboardPostId": "2026-11-09-travel-1",
-  "addedAt": "2026-11-08T20:52:40.003Z"
+  "addedAt": "2026-11-08T20:52:40.003Z",
+  "naverCategory": "여행"
  },
  {
   "id": "2026-11-09-money-2",
@@ -137,7 +141,8 @@
   ],
   "path": "2026-11-09/2026-11-09-money-2/",
   "dashboardPostId": "2026-11-09-money-2",
-  "addedAt": "2026-11-08T20:52:39.853Z"
+  "addedAt": "2026-11-08T20:52:39.853Z",
+  "naverCategory": "금융"
  },
  {
   "id": "2026-11-09-digital-2",
@@ -165,7 +170,8 @@
   ],
   "path": "2026-11-09/2026-11-09-digital-2/",
   "dashboardPostId": "2026-11-09-digital-2",
-  "addedAt": "2026-11-08T20:52:39.738Z"
+  "addedAt": "2026-11-08T20:52:39.738Z",
+  "naverCategory": "IT"
  },
  {
   "id": "2026-11-09-routine-2",
@@ -193,12 +199,14 @@
   ],
   "path": "2026-11-09/2026-11-09-routine-2/",
   "dashboardPostId": "2026-11-09-routine-2",
-  "addedAt": "2026-11-08T20:52:39.949Z"
+  "addedAt": "2026-11-08T20:52:39.949Z",
+  "naverCategory": "루틴"
  },
  {
   "id": "2026-11-09-travel-2",
   "date": "2026-11-09",
   "theme": "travel",
+  "naverCategory": "여행",
   "themeLabel": "관광지 안내",
   "index": 2,
   "slot": "20:30",
@@ -221,7 +229,7 @@
   ],
   "path": "2026-11-09/2026-11-09-travel-2/",
   "dashboardPostId": "2026-11-09-travel-2",
-  "addedAt": "2026-11-08T20:52:40.051Z"
+  "addedAt": "2026-11-09T03:55:24.684Z"
  },
  {
   "id": "2026-11-08-money-1",
@@ -249,7 +257,8 @@
   ],
   "path": "2026-11-08/2026-11-08-money-1/",
   "dashboardPostId": "2026-11-08-money-1",
-  "addedAt": "2026-11-07T20:52:10.510Z"
+  "addedAt": "2026-11-07T20:52:10.510Z",
+  "naverCategory": "금융"
  },
  {
   "id": "2026-11-08-digital-1",
@@ -277,7 +286,8 @@
   ],
   "path": "2026-11-08/2026-11-08-digital-1/",
   "dashboardPostId": "2026-11-08-digital-1",
-  "addedAt": "2026-11-07T20:52:10.414Z"
+  "addedAt": "2026-11-07T20:52:10.414Z",
+  "naverCategory": "IT"
  },
  {
   "id": "2026-11-08-routine-1",
@@ -305,7 +315,8 @@
   ],
   "path": "2026-11-08/2026-11-08-routine-1/",
   "dashboardPostId": "2026-11-08-routine-1",
-  "addedAt": "2026-11-07T20:52:10.590Z"
+  "addedAt": "2026-11-07T20:52:10.590Z",
+  "naverCategory": "루틴"
  },
  {
   "id": "2026-11-08-travel-1",
@@ -333,7 +344,8 @@
   ],
   "path": "2026-11-08/2026-11-08-travel-1/",
   "dashboardPostId": "2026-11-08-travel-1",
-  "addedAt": "2026-11-07T20:52:10.681Z"
+  "addedAt": "2026-11-07T20:52:10.681Z",
+  "naverCategory": "여행"
  },
  {
   "id": "2026-11-08-money-2",
@@ -361,7 +373,8 @@
   ],
   "path": "2026-11-08/2026-11-08-money-2/",
   "dashboardPostId": "2026-11-08-money-2",
-  "addedAt": "2026-11-07T20:52:10.551Z"
+  "addedAt": "2026-11-07T20:52:10.551Z",
+  "naverCategory": "금융"
  },
  {
   "id": "2026-11-08-digital-2",
@@ -389,7 +402,8 @@
   ],
   "path": "2026-11-08/2026-11-08-digital-2/",
   "dashboardPostId": "2026-11-08-digital-2",
-  "addedAt": "2026-11-07T20:52:10.469Z"
+  "addedAt": "2026-11-07T20:52:10.469Z",
+  "naverCategory": "IT"
  },
  {
   "id": "2026-11-08-routine-2",
@@ -417,7 +431,8 @@
   ],
   "path": "2026-11-08/2026-11-08-routine-2/",
   "dashboardPostId": "2026-11-08-routine-2",
-  "addedAt": "2026-11-07T20:52:10.639Z"
+  "addedAt": "2026-11-07T20:52:10.639Z",
+  "naverCategory": "루틴"
  },
  {
   "id": "2026-11-08-travel-2",
@@ -445,7 +460,8 @@
   ],
   "path": "2026-11-08/2026-11-08-travel-2/",
   "dashboardPostId": "2026-11-08-travel-2",
-  "addedAt": "2026-11-07T20:52:10.724Z"
+  "addedAt": "2026-11-07T20:52:10.724Z",
+  "naverCategory": "여행"
  },
  {
   "id": "2026-11-07-money-1",
@@ -473,7 +489,8 @@
   ],
   "path": "2026-11-07/2026-11-07-money-1/",
   "dashboardPostId": "2026-11-07-money-1",
-  "addedAt": "2026-11-06T20:51:38.150Z"
+  "addedAt": "2026-11-06T20:51:38.150Z",
+  "naverCategory": "금융"
  },
  {
   "id": "2026-11-07-digital-1",
@@ -501,7 +518,8 @@
   ],
   "path": "2026-11-07/2026-11-07-digital-1/",
   "dashboardPostId": "2026-11-07-digital-1",
-  "addedAt": "2026-11-06T20:51:38.036Z"
+  "addedAt": "2026-11-06T20:51:38.036Z",
+  "naverCategory": "IT"
  },
  {
   "id": "2026-11-07-routine-1",
@@ -529,7 +547,8 @@
   ],
   "path": "2026-11-07/2026-11-07-routine-1/",
   "dashboardPostId": "2026-11-07-routine-1",
-  "addedAt": "2026-11-06T09:24:26.854Z"
+  "addedAt": "2026-11-06T09:24:26.854Z",
+  "naverCategory": "루틴"
  },
  {
   "id": "2026-11-07-travel-1",
@@ -557,7 +576,8 @@
   ],
   "path": "2026-11-07/2026-11-07-travel-1/",
   "dashboardPostId": "2026-11-07-travel-1",
-  "addedAt": "2026-11-06T09:24:26.914Z"
+  "addedAt": "2026-11-06T09:24:26.914Z",
+  "naverCategory": "여행"
  },
  {
   "id": "2026-11-07-money-2",
@@ -585,7 +605,8 @@
   ],
   "path": "2026-11-07/2026-11-07-money-2/",
   "dashboardPostId": "2026-11-07-money-2",
-  "addedAt": "2026-11-06T20:51:38.200Z"
+  "addedAt": "2026-11-06T20:51:38.200Z",
+  "naverCategory": "금융"
  },
  {
   "id": "2026-11-07-digital-2",
@@ -613,7 +634,8 @@
   ],
   "path": "2026-11-07/2026-11-07-digital-2/",
   "dashboardPostId": "2026-11-07-digital-2",
-  "addedAt": "2026-11-06T20:51:38.099Z"
+  "addedAt": "2026-11-06T20:51:38.099Z",
+  "naverCategory": "IT"
  },
  {
   "id": "2026-11-07-routine-2",
@@ -641,7 +663,8 @@
   ],
   "path": "2026-11-07/2026-11-07-routine-2/",
   "dashboardPostId": "2026-11-07-routine-2",
-  "addedAt": "2026-11-06T20:51:38.245Z"
+  "addedAt": "2026-11-06T20:51:38.245Z",
+  "naverCategory": "루틴"
  },
  {
   "id": "2026-11-07-travel-2",
@@ -669,7 +692,8 @@
   ],
   "path": "2026-11-07/2026-11-07-travel-2/",
   "dashboardPostId": "2026-11-07-travel-2",
-  "addedAt": "2026-11-06T09:24:26.978Z"
+  "addedAt": "2026-11-06T09:24:26.978Z",
+  "naverCategory": "여행"
  },
  {
   "id": "2026-11-06-money-1",
@@ -697,7 +721,8 @@
   ],
   "path": "2026-11-06/2026-11-06-money-1/",
   "dashboardPostId": "2026-11-06-money-1",
-  "addedAt": "2026-11-06T09:24:26.604Z"
+  "addedAt": "2026-11-06T09:24:26.604Z",
+  "naverCategory": "금융"
  },
  {
   "id": "2026-11-06-travel-1",
@@ -725,7 +750,8 @@
   ],
   "path": "2026-11-06/2026-11-06-travel-1/",
   "dashboardPostId": "2026-11-06-travel-1",
-  "addedAt": "2026-11-06T09:24:26.736Z"
+  "addedAt": "2026-11-06T09:24:26.736Z",
+  "naverCategory": "여행"
  },
  {
   "id": "2026-11-06-money-2",
@@ -753,7 +779,8 @@
   ],
   "path": "2026-11-06/2026-11-06-money-2/",
   "dashboardPostId": "2026-11-06-money-2",
-  "addedAt": "2026-11-06T09:24:26.680Z"
+  "addedAt": "2026-11-06T09:24:26.680Z",
+  "naverCategory": "금융"
  },
  {
   "id": "2026-11-06-travel-2",
@@ -781,6 +808,7 @@
   ],
   "path": "2026-11-06/2026-11-06-travel-2/",
   "dashboardPostId": "2026-11-06-travel-2",
-  "addedAt": "2026-11-06T09:24:26.800Z"
+  "addedAt": "2026-11-06T09:24:26.800Z",
+  "naverCategory": "여행"
  }
 ]
